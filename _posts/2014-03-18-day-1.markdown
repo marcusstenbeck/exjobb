@@ -13,7 +13,7 @@ Detecting differences between the images is done in multiple ways.
 * Peak Signal to Noise Ratio (PSNR)
 * Structural Similarity Index Map (SSIM)
 
-Things
+...
 
 ## Resources
 
