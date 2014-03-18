@@ -1,3 +1,4 @@
-name: Your New Jekyll Site
+name: Marcus Stenbeck's Master Thesis Project
 markdown: redcarpet
 pygments: true
+permalink: blog/:title
