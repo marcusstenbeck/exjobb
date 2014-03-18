@@ -1,0 +1,22 @@
+---
+layout: post
+title:  "Day 1"
+date:   2014-03-18
+categories:
+---
+
+# Image quality analysis – how is it done?
+
+Detecting differences between the images is done in multiple ways.
+
+* Mean Square Error (MSE)
+* Peak Signal to Noise Ratio (PSNR)
+* Structural Similarity Index Map (SSIM)
+
+Things
+
+## Resources
+
+* [Using Image Quality Assessment to Test Rendering Algorithms][amann et al], Amann et. al
+
+[amann et al]: http://wscg.zcu.cz/wscg2013/program/full/E43-full.pdf
