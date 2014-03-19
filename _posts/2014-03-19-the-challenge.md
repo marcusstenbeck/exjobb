@@ -2,7 +2,7 @@
 layout: post
 title:  "The Challenge"
 date:   2014-03-19
-categories:
+categories: drafts
 ---
 
 **Note:** *This is a DRAFT, and it shall not be considered serious in any way.*
