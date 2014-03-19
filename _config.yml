@@ -1,5 +1,5 @@
 name: Marcus Stenbeck's Master Thesis Project
 markdown: redcarpet
 pygments: true
-permalink: blog/:title
+permalink: :categories/:title/
 url: http://marcusstenbeck.com/exjobb
