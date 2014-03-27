@@ -1,4 +1,5 @@
 [12:17] Martin Vilcans: @stenbeck You should have a look at this: http://www.sikuli.org/ I think it's a simple solution to visual testing (probably doesn't support mobile though).
 [12:19] Ramez Hanna: @stenbeck these gius have browser visual testsing but no webgl though http://usetrace.com
+[08:23?] Pablo Karlsson: @stenbeck http://phantomjs.org/ http://kilon.org/blog/2013/01/running-jasmine-tests-with-phantomjs/
 
 
