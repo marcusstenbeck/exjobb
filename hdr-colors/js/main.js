@@ -2,7 +2,7 @@
 (function () {
 
 	var UP_VECTOR = vec3.fromValues(0, 1, 0);
-	var canvasWidth = 512;
+	var canvasWidth = 768;
 	var canvasHeight = 512;
 
 	function interleaveData(data) {
@@ -77,24 +77,25 @@
 
 
 	function draw(uV, uP) {
-		bindScene(gl);
 
-		drawScene(gl);//, scene.camera.uV, scene.camera.uP);
+		HDRDrawBit(gl, gl.pingColorTexture); // Draw high values to ping
+		// Downsample and blur (median filter) to pong
+		downsampleAndBlurBit(gl, gl.pingColorTexture, gl.pongColorTexture, 8);
+		// Draw scene to ping
+		drawScene(gl, gl.pingColorTexture);
+		// Additive blend ping+pong to screen
+		additiveBlendBit(gl, gl.pingColorTexture, gl.pongColorTexture);
 
-		// drawDepthMap(gl);
+		// drawTexQuad(gl, gl.pingColorTexture, 512, 256, 256, 256);
+		// drawTexQuad(gl, gl.pongColorTexture, 512, 0, 256, 256);
 	}
 
-	// function drawDepthMap(gl) {
-	//	// drawTexturedQuad(gl, gl.depthTexture, 0, 0, 128, 128);
+	function drawTexQuad(gl, textureTarget, locx, locy, width, height) {
+		drawTexturedQuad(gl, textureTarget, locx, locy, width, height);
 
-	//	// switch back to our shader
-	//	gl.useProgram(shader.program);
-
-	//	// make sure the depth texture is
-	//	// bound to texture slot 0
-	//	gl.activeTexture(gl.TEXTURE0);
-	//	gl.bindTexture(gl.TEXTURE_2D, gl.depthTexture);
-	// }
+		// switch back to our shader
+		gl.useProgram(shader.program);
+	}
 
 //-------------------------------------------------//
 //  Setup functions
@@ -110,20 +111,22 @@
 
 		var teapotData = interleaveData(teapot); // Teapot data loaded in index.html
 
+
 		/**
-		 *  Setup and bind vertex buffer
+		 *  Model setup
 		 */
 		scene.model = {};
+		scene.model.uM = mat4.create();
+		mat4.scale(scene.model.uM, scene.model.uM, vec3.fromValues(2, 2, 2));
+
+		// Setup and bind vertex buffer
 		scene.model.vertices = teapotData.vertexData;
 		// Create vertex buffer
 		gl.vBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, gl.vBuffer);
 		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(scene.model.vertices), gl.STATIC_DRAW);
 
-
-		/**
-		 *  Setup index buffer
-		 */
+		// Setup index buffer
 		scene.model.indices = teapotData.indexData;
 		// Create index buffer
 		gl.iBuffer = gl.createBuffer();
@@ -154,19 +157,19 @@
 		window.shader = new Shader();
 
 		shader.setBit('fs', 'main', [
-			'ambient += vec4(vec3(0.05), 1.0);',
+			'//ambient += vec4(vec3(0.05), 1.0);',
 		].join('\n'));
 
 		shader.compileProgram(gl);
 		gl.useProgram(shader.program);
 	}
 
-	function bindScene(gl) {
-		gl.bindBuffer(gl.ARRAY_BUFFER, gl.vBuffer);
-		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(scene.model.vertices), gl.STATIC_DRAW);
+	function bindScene(gl, theshader, vData) {
+		// gl.bindBuffer(gl.ARRAY_BUFFER, gl.vBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vData.vertices), gl.STATIC_DRAW);
 		
-		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.iBuffer);
-		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Int16Array(scene.model.indices), gl.STATIC_DRAW);
+		// gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.iBuffer);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Int16Array(vData.indices), gl.STATIC_DRAW);
 		
 		var FLOAT_WIDTH = 4;
 		var theStride = (3+2+3) * FLOAT_WIDTH;
@@ -208,10 +211,8 @@
 	}
 
 	function sceneUpdate(time) {
-		// Model transform
-		var uM = mat4.create();
-		mat4.scale(uM, uM, vec3.fromValues(2, 2, 2));
-		gl.uniformMatrix4fv(shader.uniform.uM, false, uM);
+		// Model transform		
+		gl.uniformMatrix4fv(shader.uniform.uM, false, scene.model.uM);
 
 		// View transform
 		var dist = 40;
@@ -228,17 +229,26 @@
 		gl.uniformMatrix4fv(shader.uniform.uP, false, scene.camera.uP);
 	}
 
-	function drawScene(gl, uV, uP) {
-		// Draw scene
-		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-		gl.viewport(0, 0, canvasWidth, canvasHeight);
+	function drawScene(gl, textureTarget) {
+		bindScene(gl, shader, scene.model);
+		chooseRenderTarget(gl, textureTarget);
 
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+		gl.viewport(0, 0, 512, 512);
+		
 		gl.drawElements(gl.TRIANGLES, scene.model.indices.length, gl.UNSIGNED_SHORT, 0);
 	}
 
+	function chooseRenderTarget(gl, textureTarget) {
+		if(!textureTarget) {
+			gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+		} else {
+			gl.bindFramebuffer(gl.FRAMEBUFFER, gl.framebuffer);
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textureTarget, 0);
+		}
+	}
 
-//--                    ----------------------------------//
+//-- LIGHTS ----------------------------------------------//
 
 	function lightSetup(gl) {
 
@@ -261,30 +271,29 @@
 
 			'vec4 calculateLight() {',
 
-			'	float Lr = 2.0;',  // Light radius
-			'	float Li = 10.0;',  // Light intensity
-
 			'	vec3 n = normalize(vNormal);',
 			'	vec3 v = normalize(-vPos.xyz);',
 			'	vec3 Lout = vec3(0.0);',
 			
+			'	float Li = 2.0;',  // Intensity
+
 			'	vec3 l = normalize(vLightPosition.xyz - vPos.xyz);',  // Point-to-light
 			'	vec3 h = normalize(v + l);',  // Half vector
-			'	float cosTh = max(0.0, dot(h, l));',  // specular shenagiggiian, NdotHV
+			'	float cosTh = max(0.0, dot(n, h));',  // specular shenagiggiian, NdotHV
 			'	float cosTi = max(0.0, dot(n, l));',  // cos(theta_incident), NdotL
 			
 			// Attenuation
 			'	float dist = length(vLightPosition - vPos);',
 			'	float constantAttenuation = 1.0;',
-			'	float linearAttenuation = 2.0 / Lr;',
-			'	float quadraticAttenuation = 2.0 / (Lr * Lr);',
-			'	float attenuation = Li / ( constantAttenuation + (linearAttenuation * dist) + (quadraticAttenuation * dist * dist) );',
+			'	float linearAttenuation = 0.01 ;',
+			'	float quadraticAttenuation = 0.0001;',
+			'	float attenuation = 1.0 / (constantAttenuation + (linearAttenuation * dist) + (quadraticAttenuation * dist * dist));',
 			
-			'	float m = 1.0;',  // Smoothness from Real-Time Rendering
+			'	float m = 30.0;',  // Smoothness from Real-Time Rendering
 			'	float Kd = 1.0 / PI;',
-			'	float Ks = (m + 8.0) / (8.0 * PI);',
+			'	float Ks = (m + 8.0) / (8.0 * PI);', // Specual not affected by attenuation
 
-			'	Lout += vec3(Kd + (Ks * pow(cosTh, m)) ) * Li * cosTi * attenuation;',
+			'	Lout += vec3( Kd + (Ks * pow(cosTh, m)) ) * Li * cosTi * attenuation;',
 
 			'	return vec4(Lout, 1.0);',
 			'}',
@@ -306,23 +315,275 @@
 	function lightUpdate(time) {
 		var dist = 10;
 		var lightRadius = 5.0;
-		var rad = 20;
+		var rad = 40;
 		var timeFactor = -time/500;
 		gl.uniform3fv(shader.uniform.uLightPosition, vec3.fromValues(
 			rad * Math.sin( timeFactor ),
-			lightRadius + dist + dist * Math.cos(timeFactor/10),
+			lightRadius + dist * Math.cos(timeFactor/10),
 			rad * Math.cos( timeFactor )
 		));
 	}
 
+//------------------------------------------------------//
+
+//-- HDR PASS ------------------------------------------//
+
+	function HDRSetup(gl) {
+		gl.texSize = 512;
+
+		// Create ping color texture
+		gl.pingColorTexture = gl.createTexture();
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, gl.pingColorTexture);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.texSize, gl.texSize, 0, gl.RGBA, textureType, null);
+
+		// Create pong color texture
+		gl.pongColorTexture = gl.createTexture();
+		gl.activeTexture(gl.TEXTURE0 + 1);
+		gl.bindTexture(gl.TEXTURE_2D, gl.pongColorTexture);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.texSize, gl.texSize, 0, gl.RGBA, textureType, null);
+
+
+		// Create the depth buffer
+		gl.depthBuffer = gl.createRenderbuffer();
+		gl.bindRenderbuffer(gl.RENDERBUFFER, gl.depthBuffer);
+		gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, gl.texSize, gl.texSize);
+
+		// Create the framebuffer
+		gl.framebuffer = gl.createFramebuffer();
+		gl.bindFramebuffer(gl.FRAMEBUFFER, gl.framebuffer);
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, gl.pingColorTexture, 0);
+		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, gl.depthBuffer);
+
+
+		shader.setBit('fs', 'front', [
+			shader.getBit('fs', 'front'),
+			'uniform int uHDR;',
+		].join('\n'));
+
+		shader.setBit('fs', 'main', [
+			shader.getBit('fs', 'main'),
+			'if(uHDR == 1) diffuse *= step(1.0, diffuse);'
+		].join('\n'));
+
+		shader.compileProgram(gl);
+	}
+
+	function HDRDrawBit(gl, textureTarget) {
+		bindScene(gl, shader, scene.model);
+
+		gl.uniform1i(shader.uniform.uHDR, 1);
+
+		// Draw HDR texture
+		chooseRenderTarget(gl, textureTarget);
+
+		gl.viewport(0, 0, gl.texSize, gl.texSize);
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+		
+		gl.drawElements(gl.TRIANGLES, scene.model.indices.length, gl.UNSIGNED_SHORT, 0);
+
+		gl.uniform1i(shader.uniform.uHDR, 0);
+	}
 
 //------------------------------------------------------//
+
+//-- DOWNSAMPLE and BLUR -------------------------------//
+
+	function downsampleAndBlurSetup(gl) {
+		var shader = new Shader();
+
+
+		shader.setBit('fs', 'front', [
+			'uniform sampler2D uTexture;',
+			'uniform int size;',
+			'uniform vec2 dir;',
+		].join('\n'));
+
+		// https://gitorious.org/gluon/gluon/source/f64961dbea07b31fe5292900deaf09716bb196ba:graphics/shaders/GLSL/mosaic.frag
+		shader.setBit('fs', 'main', [
+			'float blur = 1.0 / float(size);',
+
+			'diffuse += texture2D(uTexture, vTexCoord - vec2(4.0 * blur, 4.0 * blur) * dir) * 0.0162162162;',
+			'diffuse += texture2D(uTexture, vTexCoord - vec2(3.0 * blur, 3.0 * blur) * dir) * 0.0540540541;',
+			'diffuse += texture2D(uTexture, vTexCoord - vec2(2.0 * blur, 2.0 * blur) * dir) * 0.1216216216;',
+			'diffuse += texture2D(uTexture, vTexCoord - vec2(blur, blur) * dir) * 0.1945945946;',
+			'diffuse += texture2D(uTexture, vTexCoord) * 0.2270270270;',
+			'diffuse += texture2D(uTexture, vTexCoord + vec2(blur, blur) * dir) * 0.1945945946;',
+			'diffuse += texture2D(uTexture, vTexCoord + vec2(2.0 * blur, 2.0 * blur) * dir) * 0.1216216216;',
+			'diffuse += texture2D(uTexture, vTexCoord + vec2(3.0 * blur, 3.0 * blur) * dir) * 0.0540540541;',
+			'diffuse += texture2D(uTexture, vTexCoord + vec2(4.0 * blur, 4.0 * blur) * dir) * 0.0162162162;',
+		].join('\n'));
+
+		shader.compileProgram(gl);
+
+		var extraTexture = gl.createTexture();
+		gl.bindTexture(gl.TEXTURE_2D, extraTexture);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+		gl.downsampleAndBlur = {
+			shader: shader,
+			extraTexture: extraTexture
+		};
+	}
+
+	function downsampleAndBlurBit(gl, texture, textureTarget, factor) {
+		gl.useProgram(gl.downsampleAndBlur.shader.program);
+		bindScene(gl, gl.downsampleAndBlur.shader, gl.quad);
+
+		var factor = factor || 2;
+
+		// Gotta bind the matrices since that doesn't happen in bindScene()
+		var matrix = mat4.create();
+		gl.uniformMatrix4fv(gl.downsampleAndBlur.shader.uniform.uM, false, matrix);
+		gl.uniformMatrix4fv(gl.downsampleAndBlur.shader.uniform.uV, false, matrix);
+		gl.uniformMatrix4fv(gl.downsampleAndBlur.shader.uniform.uP, false, matrix);
+
+
+		gl.bindTexture(gl.TEXTURE_2D, gl.downsampleAndBlur.extraTexture);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.texSize / factor, gl.texSize / factor, 0, gl.RGBA, textureType, null);
+
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, texture);
+
+		gl.uniform1i(gl.downsampleAndBlur.shader.uniform.size, gl.texSize/factor);
+
+		chooseRenderTarget(gl, gl.downsampleAndBlur.extraTexture);
+		gl.activeTexture(gl.TEXTURE0 + 1);
+		gl.bindTexture(gl.TEXTURE_2D, gl.downsampleAndBlur.extraTexture);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.texSize / factor, gl.texSize / factor, 0, gl.RGBA, textureType, null);
+		// Create the depth buffer
+		var halfSizeDepthbuffer = gl.createRenderbuffer();
+		gl.bindRenderbuffer(gl.RENDERBUFFER, halfSizeDepthbuffer);
+		gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, gl.texSize / factor, gl.texSize / factor);
+		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, halfSizeDepthbuffer);
+
+		gl.viewport(0, 0, gl.texSize / factor, gl.texSize / factor);
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+		
+
+
+		var horizontal = [1,0];
+		var vertical = [0,1];
+
+		// Blur X
+		gl.uniform2fv(gl.downsampleAndBlur.shader.uniform.dir, vertical);
+		gl.drawElements(gl.TRIANGLES, gl.quad.indices.length, gl.UNSIGNED_SHORT, 0);
+
+		// Blur Y
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, gl.downsampleAndBlur.extraTexture);
+
+		chooseRenderTarget(gl, textureTarget);
+		// Go back to normal size
+		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, gl.depthBuffer);
+		
+		gl.viewport(0, 0, gl.texSize, gl.texSize);
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+		gl.uniform2fv(gl.downsampleAndBlur.shader.uniform.dir, horizontal);
+		gl.drawElements(gl.TRIANGLES, gl.quad.indices.length, gl.UNSIGNED_SHORT, 0);
+
+
+		gl.useProgram(shader.program);
+	}
+
+//------------------------------------------------------//
+
+//-- ADDITIVE BLEND ------------------------------------//
+
+	function additiveBlendSetup(gl) {
+		var shader = new Shader();
+
+		shader.setBit('fs', 'front', [
+			'uniform sampler2D uTextureA;',
+			'uniform sampler2D uTextureB;'
+		].join('\n'));
+
+		shader.setBit('fs', 'main', [
+			'vec4 luminance = texture2D(uTextureA, vTexCoord) + texture2D(uTextureB, vTexCoord);',
+			'float Lwhite = 1.0;',
+			'diffuse = (luminance * (1.0 + (luminance / pow(Lwhite, 2.0)))) / (1.0 + luminance);',
+		].join('\n'));
+
+		shader.compileProgram(gl);
+
+		gl.additiveBlend = {
+			shader: shader
+		};
+	}
+
+	function additiveBlendBit(gl, textureA, textureB, textureTarget) {
+		gl.useProgram(gl.additiveBlend.shader.program);
+		
+		bindScene(gl, gl.additiveBlend.shader, gl.quad);
+
+		// Gotta bind the matrices since that doesn't happen in bindScene()
+		var matrix = mat4.create();
+		gl.uniformMatrix4fv(gl.additiveBlend.shader.uniform.uM, false, matrix);
+		gl.uniformMatrix4fv(gl.additiveBlend.shader.uniform.uV, false, matrix);
+		gl.uniformMatrix4fv(gl.additiveBlend.shader.uniform.uP, false, matrix);
+
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, textureA);
+		gl.uniform1i(gl.additiveBlend.shader.uniform.uTextureA, 0);
+
+		gl.activeTexture(gl.TEXTURE0 + 1);
+		gl.bindTexture(gl.TEXTURE_2D, textureB);
+		gl.uniform1i(gl.additiveBlend.shader.uniform.uTextureB, 1);
+
+		// Draw HDR texture
+		chooseRenderTarget(gl, textureTarget);
+
+		gl.viewport(0, 0, gl.texSize, gl.texSize);
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+		
+		gl.drawElements(gl.TRIANGLES, gl.quad.indices.length, gl.UNSIGNED_SHORT, 0);
+
+		gl.useProgram(shader.program);
+	}
+
+//------------------------------------------------------//
+
+//-- QUAD ----------------------------------------------//
+	function setupQuad(gl) {
+		gl.quad = {
+			vertices: [
+				-1,  1,  0,   0, 1,   0,0,0,
+				 1,  1,  0,   1, 1,   0,0,0,
+				 1, -1,  0,   1, 0,   0,0,0,
+				-1, -1,  0,   0, 0,   0,0,0,
+			],
+			indices: [0,1,2,  0,2,3]
+		}	
+	}
+
+//------------------------------------------------------//
+
 
 	window.gl = init();
 	window.scene = {};
 	
+	gl.floatTextureExt = gl.getExtension('OES_texture_float');
+	gl.floatTextureLinearExt = gl.getExtension('OES_texture_float_linear');
+	window.textureType = gl.FLOAT;
+
+	setupQuad(gl);
 	setupScene(gl);
 	lightSetup(gl);
+	HDRSetup(gl);
+	downsampleAndBlurSetup(gl);
+	additiveBlendSetup(gl);
 
 
 	var lastTime = 0;

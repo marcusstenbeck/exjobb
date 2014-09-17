@@ -13,8 +13,8 @@ var strBoilerplate = [
 var choke = {
 	'MAX_VERTEX_ATTRIBS' : 8,
 	// 'WEBGL_depth_texture': false,
-	'OES_texture_float': false,
-	'OES_texture_half_float': false
+	// 'OES_texture_float': false,
+	// 'OES_texture_half_float': false
 };
 
 // Shim the canvas
