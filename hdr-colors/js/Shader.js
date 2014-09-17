@@ -19,8 +19,12 @@
 			'uniform mat4 uV;',
 
 			'attribute vec3 aVertexPosition;',
+			'attribute vec2 aVertexTexCoord;',
+			'attribute vec3 aVertexNormal;',
 
 			'varying vec4 vPos;',
+			'varying vec2 vTexCoord;',
+			'varying vec3 vNormal;',
 
 			'//begin(front)',
 			'//end(front)',
@@ -28,6 +32,8 @@
 			'void main(void) {',
 			'	vec4 worldVertexPosition = uM * vec4(aVertexPosition, 1.0);',
 			'	vPos = uV * worldVertexPosition;',
+			'	vTexCoord = aVertexTexCoord;',
+			'	vNormal = mat3(uV) * mat3(uM) * aVertexNormal;',
 
 			'	//begin(main)',
 			'	//end(main)',
@@ -39,7 +45,13 @@
 
 		// Fragment shader
 		this._fragSrc = [
+			'//-- MACROS -----------------------------------------------',
+			'#define PI        3.14159265',
+			'//---------------------------------------------------------',
+
 			'varying vec4 vPos;',
+			'varying vec2 vTexCoord;',
+			'varying vec3 vNormal;',
 
 			'//begin(front)',
 			'//end(front)',
@@ -90,12 +102,12 @@
 
 		// The opening bit doesn't exist
 		if(beginPoint < 0) {
-			console.warn('Opening bit not found:', strBegin);
+			throw 'Opening bit not found: ' + strBegin;
 			return;
 		}
 		// The closing bit doesn't exist
 		if(endPoint < 0) {
-			console.warn('Closing bit not found:', strBegin);
+			throw 'Closing bit not found: ' + strBegin;
 			return;
 		}
 

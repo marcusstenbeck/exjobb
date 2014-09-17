@@ -2,11 +2,48 @@
 (function () {
 
 	var UP_VECTOR = vec3.fromValues(0, 1, 0);
+	var canvasWidth = 512;
+	var canvasHeight = 512;
+
+	function interleaveData(data) {
+		/*
+			Expects data in format
+			{
+				vertexPositions: [x1, y1, z1, x2, y2, z2, ... ],
+				vertexNormals: [nx1, ny1, nz1, nx2, ny2, nz2, ... ],
+				vertexTextureCoords: [tx1, ty1, tx2, ty2, ... ],
+				indices: [tr1_p1, tr1_p2, tr1_p3, tr2_p1, tr2_p2, tr2_p3, ... ]
+			}
+		*/
+		var vCount = data.vertexPositions.length / 3;
+		var vertexData = new Array();
+
+		var tempData;
+		for (var i = 0; i < vCount; i++) {
+			tempData = [
+				data.vertexPositions[ i * 3 ],
+				data.vertexPositions[ i * 3 + 1 ],
+				data.vertexPositions[ i * 3 + 2 ],
+				
+				data.vertexTextureCoords[ i * 2 ],
+				data.vertexTextureCoords[ i * 2 + 1 ],
+				
+				data.vertexNormals[ i * 3 ],
+				data.vertexNormals[ i * 3 + 1 ],
+				data.vertexNormals[ i * 3 + 2 ],
+			];
+
+			vertexData = vertexData.concat(tempData);
+		};
+
+		return {
+			vertexData: vertexData,
+			indexData: data.indices
+		};
+	}
 
 
 	function init() {
-		var canvasWidth = 512;
-		var canvasHeight = 512;
 		document.write('<canvas width="' + canvasWidth + '" height="' + canvasHeight + '"></canvas>')
 
 		var canv = document.getElementsByTagName('canvas')[0];
@@ -33,55 +70,8 @@
 	function update(tpf) {
 		time = time + tpf;
 
-		/**
-		 *  Upload uniforms
-		 */
-		
-		// // Model transform
-		gl.uniformMatrix4fv(shader.uniform.uM, false, mat4.create());
-
-		// // Perspective transform
-		gl.uniformMatrix4fv(shader.uniform.uP, false, scene.camera.uP);
-
-		// Camera
-		var dist = 2.0;
-		mat4.lookAt(
-			scene.camera.uV,
-			vec3.fromValues(dist*Math.sin(time/4000), 0, dist*Math.cos(time/4000)),
-			vec3.fromValues(0, 0, 0),
-			UP_VECTOR);
-
-
-		// Light position
-		scene.light.uLightPosition = vec3.fromValues(Math.cos(time/1500), 1, Math.sin(time/1500));
-		gl.uniform3fv(shader.uniform.uLightPosition, scene.light.uLightPosition);
-
-		// Light direction
-		var lightLookatPoint = vec3.fromValues(0, -0.5, 0);
-		// From light pos to lookatpoint
-		mat4.lookAt(
-			scene.light.uLightMatrix,
-			scene.light.uLightPosition,
-			lightLookatPoint,
-			UP_VECTOR);
-		gl.uniformMatrix4fv(shader.uniform.uLightMatrix, false, scene.light.uLightMatrix);
-		
-		// Upload inverted lightmatrix too
-		mat4.invert(scene.light.uLightMatrixInverse, scene.light.uLightMatrix);
-		gl.uniformMatrix4fv(shader.uniform.uLightMatrixInverse, false, scene.light.uLightMatrixInverse);
-
-		/**
-		 *  Upload attributes
-		 */
-		gl.enableVertexAttribArray(shader.attribute.aVertexPosition);
-		gl.vertexAttribPointer(
-								shader.attribute.aVertexPosition,
-								3,
-								gl.FLOAT,
-								false,
-								0,
-								0
-							);
+		sceneUpdate(time);
+		lightUpdate(time);
 	}
 
 
@@ -89,26 +79,22 @@
 	function draw(uV, uP) {
 		bindScene(gl);
 
-		if(gl.shadowMappingSupported) {
-			shadowMapDrawBit(gl);
-		}
+		drawScene(gl);//, scene.camera.uV, scene.camera.uP);
 
-		drawScene(gl, scene.camera.uV, scene.camera.uP);
-
-		drawDepthMap(gl);
+		// drawDepthMap(gl);
 	}
 
-	function drawDepthMap(gl) {
-		drawTexturedQuad(gl, gl.depthTexture, 0, 0, 128, 128);
+	// function drawDepthMap(gl) {
+	//	// drawTexturedQuad(gl, gl.depthTexture, 0, 0, 128, 128);
 
-		// switch back to our shader
-		gl.useProgram(shader.program);
+	//	// switch back to our shader
+	//	gl.useProgram(shader.program);
 
-		// make sure the depth texture is
-		// bound to texture slot 0
-		gl.activeTexture(gl.TEXTURE0);
-		gl.bindTexture(gl.TEXTURE_2D, gl.depthTexture);
-	}
+	//	// make sure the depth texture is
+	//	// bound to texture slot 0
+	//	gl.activeTexture(gl.TEXTURE0);
+	//	gl.bindTexture(gl.TEXTURE_2D, gl.depthTexture);
+	// }
 
 //-------------------------------------------------//
 //  Setup functions
@@ -119,427 +105,224 @@
 		gl.clearColor(0.0, 0.0, 0.0, 1.0);
 		gl.enable(gl.DEPTH_TEST);
 
+
+		window.scene = {};
+
+		var teapotData = interleaveData(teapot); // Teapot data loaded in index.html
+
 		/**
 		 *  Setup and bind vertex buffer
 		 */
-		gl.model = {};
-		gl.model.vertices = [
-			// Square
-				-0.5,   0.5,   0.0,
-				 0.5,   0.5,   0.0,
-				 0.5,  -0.5,   0.0,
-				-0.5,  -0.5,   0.0,
-
-			// Square
-				-100,   100,   -950,
-				 100,   100,   -950,
-				 100,  -100,   -950,
-				-100,  -100,   -950,
-
-			// Floor
-				-10, -1, -10,
-				 10, -1, -10,
-				 10, -1,  10,
-				-10, -1,  10
-			];
+		scene.model = {};
+		scene.model.vertices = teapotData.vertexData;
+		// Create vertex buffer
 		gl.vBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, gl.vBuffer);
-		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(gl.model.vertices), gl.STATIC_DRAW);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(scene.model.vertices), gl.STATIC_DRAW);
 
 
 		/**
-		 *  Setup and bind index buffer
+		 *  Setup index buffer
 		 */
-		gl.model.indices = [
-			// Square
-				0, 1, 2,
-				2, 3, 0,
-
-			// Square 2
-				4, 5, 6,
-				6, 7, 4,
-
-			// Floor
-				8, 9, 10,
-				10, 11, 8
-		];
+		scene.model.indices = teapotData.indexData;
+		// Create index buffer
 		gl.iBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.iBuffer);
-		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Int16Array(gl.model.indices), gl.STATIC_DRAW);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Int16Array(scene.model.indices), gl.STATIC_DRAW);
 
 
 		/**
-		 *  Build and setup shader program
+		 *  Camera setup
 		 */
-		window.shader = new Shader();
-		shader.compileProgram(gl);
-		gl.useProgram(shader.program);
-
-
-		/**
-		 *  Set up camera
-		 */
-		
 		scene.camera = {};
 
-		// Model transform
-		var uM = mat4.create();
+		scene.camera.uV = mat4.create();
 
-		// View transform
-		scene.camera.uV = mat4.create()
-
-		// Perspective transform
 		scene.camera.uP = mat4.create();
 		mat4.perspective(
 			scene.camera.uP,
 			Math.PI/2,
 			1,
 			0.01,
-			10000);
+			10000
+		);
 
 
+		/**
+		 *  Build and setup shader program
+		 */
+		window.shader = new Shader();
 
-		scene.light = {};
+		shader.setBit('fs', 'main', [
+			'ambient += vec4(vec3(0.05), 1.0);',
+		].join('\n'));
 
-		// Light position
-		scene.light.uLightPosition = vec3.fromValues(0, 1, 0);
-
-		// Light attenuation
-		scene.light.uLightAttenuation = 1.0;
-
-		// Light matrix
-		scene.light.uLightMatrix = mat4.create();
-
-		// Light matrix inverse
-		scene.light.uLightMatrixInverse = mat4.create();
+		shader.compileProgram(gl);
+		gl.useProgram(shader.program);
 	}
 
 	function bindScene(gl) {
 		gl.bindBuffer(gl.ARRAY_BUFFER, gl.vBuffer);
-		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(gl.model.vertices), gl.STATIC_DRAW);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(scene.model.vertices), gl.STATIC_DRAW);
+		
 		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.iBuffer);
-		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Int16Array(gl.model.indices), gl.STATIC_DRAW);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Int16Array(scene.model.indices), gl.STATIC_DRAW);
+		
+		var FLOAT_WIDTH = 4;
+		var theStride = (3+2+3) * FLOAT_WIDTH;
+		
 		shader.attribute.aVertexPosition = gl.getAttribLocation(shader.program, 'aVertexPosition');
+		shader.attribute.aVertexTexCoord = gl.getAttribLocation(shader.program, 'aVertexTexCoord');
+		shader.attribute.aVertexNormal = gl.getAttribLocation(shader.program, 'aVertexNormal');
+		
 		gl.enableVertexAttribArray(shader.attribute.aVertexPosition);
+		gl.enableVertexAttribArray(shader.attribute.aVertexTexCoord);
+		gl.enableVertexAttribArray(shader.attribute.aVertexNormal);
+
 		gl.vertexAttribPointer(
-								shader.attribute.aVertexPosition,
-								3,
-								gl.FLOAT,
-								false,
-								0,
-								0
-							);
+			shader.attribute.aVertexPosition,
+			3,
+			gl.FLOAT,
+			false,
+			theStride,
+			0
+		);
+		
+		gl.vertexAttribPointer(
+			shader.attribute.aVertexTexCoord,
+			2,
+			gl.FLOAT,
+			false,
+			theStride,
+			3 * FLOAT_WIDTH
+		);
+
+		gl.vertexAttribPointer(
+			shader.attribute.aVertexNormal,
+			3,
+			gl.FLOAT,
+			false,
+			theStride,
+			(2+3) * FLOAT_WIDTH
+		);
+	}
+
+	function sceneUpdate(time) {
+		// Model transform
+		var uM = mat4.create();
+		mat4.scale(uM, uM, vec3.fromValues(2, 2, 2));
+		gl.uniformMatrix4fv(shader.uniform.uM, false, uM);
+
+		// View transform
+		var dist = 40;
+		var timeFactor = time/10000;
+		mat4.lookAt(
+			scene.camera.uV,
+			vec3.fromValues(dist * Math.sin(timeFactor), (1/3) * dist, dist * Math.cos(timeFactor)),
+			vec3.fromValues(0, 0, 0),
+			UP_VECTOR
+		);
+		gl.uniformMatrix4fv(shader.uniform.uV, false, scene.camera.uV);
+
+		// Perspective transform
+		gl.uniformMatrix4fv(shader.uniform.uP, false, scene.camera.uP);
 	}
 
 	function drawScene(gl, uV, uP) {
-		// Upload camera view matrix
-		gl.uniformMatrix4fv(shader.uniform.uV, false, uV);
-		gl.uniformMatrix4fv(shader.uniform.uP, false, uP);
-		
 		// Draw scene
 		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-		gl.viewport(0, 0, 512, 512);
+		gl.viewport(0, 0, canvasWidth, canvasHeight);
 
-		gl.drawElements(gl.TRIANGLES, gl.model.indices.length, gl.UNSIGNED_SHORT, 0);
+		gl.drawElements(gl.TRIANGLES, scene.model.indices.length, gl.UNSIGNED_SHORT, 0);
 	}
 
 
-//--SHADOW MAPPING SETUP----------------------------------//
+//--                    ----------------------------------//
 
+	function lightSetup(gl) {
 
-	function shadowMapDrawBit(gl) {
+		/**
+		 *  Update shader
+		 */
 
-		if(gl.shadowMappingType === 'depth_texture') {
-			// Upload perspective matrix
-			gl.uniformMatrix4fv(shader.uniform.uP, false, scene.camera.uP);
-			
-			// Upload light matrices
-			gl.uniformMatrix4fv(shader.uniform.uV, false, scene.light.uLightMatrix);
-
-			// Draw shadow map
-			gl.bindFramebuffer(gl.FRAMEBUFFER, gl.framebuffer);
-			gl.viewport(0, 0, gl.texSize, gl.texSize);
-			gl.clear(gl.DEPTH_BUFFER_BIT);
-			
-			gl.drawElements(gl.TRIANGLES, gl.model.indices.length, gl.UNSIGNED_SHORT, 0);
-		}
-
-		if(gl.shadowMappingType === 'packed_8_bit_texture') {
-
-			gl.useProgram(gl.shadowMapShader.program);
-
-			// bind scene
-			gl.bindBuffer(gl.ARRAY_BUFFER, gl.vBuffer);
-			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(gl.model.vertices), gl.STATIC_DRAW);
-			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.iBuffer);
-			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Int16Array(gl.model.indices), gl.STATIC_DRAW);
-			
-
-			// Model transform
-			var uM = mat4.create();
-			gl.uniformMatrix4fv(gl.shadowMapShader.uniform.uM, false, uM);
-
-			
-			
-			// Vertex data
-			gl.shadowMapShader.attribute.aVertexPosition = gl.getAttribLocation(gl.shadowMapShader.program, 'aVertexPosition');
-			gl.enableVertexAttribArray(gl.shadowMapShader.attribute.aVertexPosition);
-			gl.vertexAttribPointer(
-									gl.shadowMapShader.attribute.aVertexPosition,
-									3,
-									gl.FLOAT,
-									false,
-									0,
-									0
-								);
-
-			// Upload perspective matrix
-			gl.uniformMatrix4fv(gl.shadowMapShader.uniform.uP, false, scene.camera.uP);
-			
-			// Upload light matrices
-			gl.uniformMatrix4fv(gl.shadowMapShader.uniform.uV, false, scene.light.uLightMatrix);
-
-
-			gl.bindFramebuffer(gl.FRAMEBUFFER, gl.framebuffer);
-			gl.viewport(0, 0, gl.texSize, gl.texSize);
-			gl.clearColor(1.0, 1.0, 1.0, 1.0);
-			gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-			gl.drawElements(gl.TRIANGLES, gl.model.indices.length, gl.UNSIGNED_SHORT, 0);
-		
-			// go back to normal program
-			gl.clearColor(0.0, 0.0, 0.0, 1.0);
-			gl.useProgram(shader.program);
-		}
-
-	}
-
-
-	/**
-	 *  Create depth texture stuff
-	 */
- 	function shadowMapSetupBit(gl) {
-		gl.shadowMappingSupported = true;
-		
-
-
-		// The type of shadow mapping
-		gl.shadowMappingType = 'packed_8_bit_texture';
-
-		var vsFrontBit = [
+		shader.setBit('vs', 'front', [
 			'uniform vec3 uLightPosition;',
-			'uniform mat4 uLightMatrix;',
-			'uniform mat4 uLightMatrixInverse;',
-
 			'varying vec4 vLightPosition;',
-			'varying vec3 vLightDirection;',
+		].join('\n'));
 
-			'varying vec4 vShadowPos;',
-			'const mat4 depthScaleMatrix = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.5, 0.5, 0.5, 1.0);',
-		].join('\n');
+		shader.setBit('vs', 'main', [
+			'vLightPosition = uV * vec4(uLightPosition, 1.0);',
+		].join('\n'));
 
-		var vsMainBit = [
-			'vLightPosition = uV * uM * vec4(uLightPosition, 1.0);',
-			'vLightDirection = mat3(uV * uLightMatrixInverse) * normalize(vec3(0.0, 0.0, -1.0));',
-
-			'vShadowPos = depthScaleMatrix * uP * uLightMatrix * worldVertexPosition;',
-		].join('\n');
-
-		var fsFrontBit = [
-			'uniform sampler2D uDepthTexture;',
-			'varying vec4 vShadowPos;',
+		shader.setBit('fs', 'front', [
 			'varying vec4 vLightPosition;',
-			'varying vec3 vLightDirection;',
+			'uniform vec3 uLightColor;',
 
 			'vec4 calculateLight() {',
-			'	vec4 lightToPos = vPos - vLightPosition;',
-			'	float dotProduct = dot(normalize(lightToPos.xyz), normalize(vLightDirection));',
-			'	float falloff = sign(dotProduct) * smoothstep(0.9, 1.0, abs(dotProduct));',
-			'	float luminance = max(0.0, falloff * smoothstep(5.0, 1.0, length(lightToPos)));',
 
-			'	return vec4(vec3(luminance), 1.0);',
+			'	float Lr = 2.0;',  // Light radius
+			'	float Li = 10.0;',  // Light intensity
+
+			'	vec3 n = normalize(vNormal);',
+			'	vec3 v = normalize(-vPos.xyz);',
+			'	vec3 Lout = vec3(0.0);',
+			
+			'	vec3 l = normalize(vLightPosition.xyz - vPos.xyz);',  // Point-to-light
+			'	vec3 h = normalize(v + l);',  // Half vector
+			'	float cosTh = max(0.0, dot(h, l));',  // specular shenagiggiian, NdotHV
+			'	float cosTi = max(0.0, dot(n, l));',  // cos(theta_incident), NdotL
+			
+			// Attenuation
+			'	float dist = length(vLightPosition - vPos);',
+			'	float constantAttenuation = 1.0;',
+			'	float linearAttenuation = 2.0 / Lr;',
+			'	float quadraticAttenuation = 2.0 / (Lr * Lr);',
+			'	float attenuation = Li / ( constantAttenuation + (linearAttenuation * dist) + (quadraticAttenuation * dist * dist) );',
+			
+			'	float m = 1.0;',  // Smoothness from Real-Time Rendering
+			'	float Kd = 1.0 / PI;',
+			'	float Ks = (m + 8.0) / (8.0 * PI);',
+
+			'	Lout += vec3(Kd + (Ks * pow(cosTh, m)) ) * Li * cosTi * attenuation;',
+
+			'	return vec4(Lout, 1.0);',
 			'}',
-		].join('\n');
+		].join('\n'));
 
-		var fsMainBit = [
-			'if(isInShadow() == 0.0) {',
-			'	diffuse += calculateLight();',
-			'}',
-		].join('\n');
-
-
-		// Texture size
-		gl.texSize = 512;
-
-		
-		gl.depthTextureExt = gl.getExtension('WEBGL_depth_texture');
-		if(gl.depthTextureExt) {
-			gl.shadowMappingType = 'depth_texture';
-
-			// Create a color texture
-			gl.colorTexture = gl.createTexture();
-			gl.bindTexture(gl.TEXTURE_2D, gl.colorTexture);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.texSize, gl.texSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-
-			// Create the depth texture
-			gl.depthTexture = gl.createTexture();
-			gl.bindTexture(gl.TEXTURE_2D, gl.depthTexture);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-			gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, gl.texSize, gl.texSize, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, null);
-
-			gl.framebuffer = gl.createFramebuffer();
-			gl.bindFramebuffer(gl.FRAMEBUFFER, gl.framebuffer);
-			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, gl.colorTexture, 0);
-			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, gl.depthTexture, 0);
-
-			gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-			fsFrontBit = [fsFrontBit,
-				'float isInShadow() {',
-				'	vec3 depth = vShadowPos.xyz / vShadowPos.w;',
-				'	float shadowValue = texture2D(uDepthTexture, depth.xy).r;',
-
-				'	depth.z *= 0.999;',
-				'	if(shadowValue > depth.z) {',
-						// Not in shadow
-				'		return 0.0;',
-				'	}',
-
-					// In shadow
-				'	return 1.0;',
-				'}'
-			].join('\n');
-		}
-
-		// Nothing else has been set up, so go for
-		// the minimally supported strategy
-		if(gl.shadowMappingType === 'packed_8_bit_texture') {
-			// Create a color texture used for depth
-			gl.depthTexture = gl.createTexture();
-			gl.bindTexture(gl.TEXTURE_2D, gl.depthTexture);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.texSize, gl.texSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-
-
-			// Create the depth buffer
-			gl.depthBuffer = gl.createRenderbuffer();
-			gl.bindRenderbuffer(gl.RENDERBUFFER, gl.depthBuffer);
-			gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, gl.texSize, gl.texSize);
-
-			// Create the framebuffer
-			gl.framebuffer = gl.createFramebuffer();
-			gl.bindFramebuffer(gl.FRAMEBUFFER, gl.framebuffer);
-			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, gl.depthTexture, 0);
-			gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, gl.depthBuffer);
-
-			fsFrontBit = [fsFrontBit,
-				'float unpack (vec4 colour)',
-				'{',
-				'	const vec4 bitShifts = vec4(1.0 / (256.0 * 256.0 * 256.0),',
-				'								1.0 / (256.0 * 256.0),',
-				'								1.0 / 256.0,',
-				'								1);',
-				'	return dot(colour, bitShifts);',
-				'}',
-
-				'float isInShadow() {',
-				'	vec3 depth = vShadowPos.xyz / vShadowPos.w;',
-				'	float shadowValue = 0.5 + 0.5 * unpack(texture2D(uDepthTexture, depth.xy));',
-
-				'	depth.z *= 0.999;',
-				'	if(shadowValue > depth.z) {',
-						// Not in shadow
-				'		return 0.0;',
-				'	}',
-
-					// In shadow
-				'	return 1.0;',
-				'}'
-			].join('\n');
-
-
-			/**
-			 *  Special shader for depth value storage
-			 */
-			gl.shadowMapShader = new Shader();
-
-			gl.shadowMapShader._vertSrc = [
-				'uniform mat4 uP;',
-				'uniform mat4 uM;',
-				'uniform mat4 uV;',
-
-				'attribute vec3 aVertexPosition;',
-
-				'varying vec4 vPos;',
-
-				'void main(void) {',
-				'	vPos = uP * uV * uM * vec4(aVertexPosition, 1.0);',
-				
-				'	gl_Position = vPos;',
-				'}'
-			].join('\n');
-
-			gl.shadowMapShader._fragSrc = [
-				'varying vec4 vPos;',
-
-				'vec4 pack (float depth) {',
-				'	const vec4 bitSh = vec4(256 * 256 * 256,',
-				'							256 * 256,',
-				'							256,',
-				'							1.0);',
-				'	const vec4 bitMsk = vec4(0,',
-				'							1.0 / 256.0,',
-				'							1.0 / 256.0,',
-				'							1.0 / 256.0);',
-				'	vec4 comp = fract(depth * bitSh);',
-				'	comp -= comp.xxyz * bitMsk;',
-				'	return comp;',
-				'}',
-
-				'void main(void) {',
-				'	vec3 depth = vPos.xyz / vPos.w;',
-
-				'	gl_FragColor = pack(depth.z);',
-				'}'
-			].join('\n');
-
-			gl.shadowMapShader.compileProgram(gl);
-		}
-
-		shader.setBit('vs', 'front', vsFrontBit);
-		shader.setBit('vs', 'main', vsMainBit);
-		shader.setBit('fs', 'front', fsFrontBit);
-		shader.setBit('fs', 'main', fsMainBit);
-
+		shader.setBit('fs', 'main', [
+			shader.getBit('fs', 'main'),
+			'diffuse += calculateLight();',
+		].join('\n'));
 
 		shader.compileProgram(gl);
 		gl.useProgram(shader.program);
 
+	}
 
-		if(gl.shadowMappingType) {
-			console.log('Shadow mapping type:', gl.shadowMappingType);
-		}
- 	}
+	// function lightDraw(gl) {
+	// }
+
+	function lightUpdate(time) {
+		var dist = 10;
+		var lightRadius = 5.0;
+		var rad = 20;
+		var timeFactor = -time/500;
+		gl.uniform3fv(shader.uniform.uLightPosition, vec3.fromValues(
+			rad * Math.sin( timeFactor ),
+			lightRadius + dist + dist * Math.cos(timeFactor/10),
+			rad * Math.cos( timeFactor )
+		));
+	}
 
 
 //------------------------------------------------------//
 
 	window.gl = init();
 	window.scene = {};
- 	
- 	setupScene(gl);
- 	shadowMapSetupBit(gl);
+	
+	setupScene(gl);
+	lightSetup(gl);
 
 
 	var lastTime = 0;

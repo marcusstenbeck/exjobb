@@ -12,7 +12,9 @@ var strBoilerplate = [
 	// Create a map of stuff that we're gonna choke
 var choke = {
 	'MAX_VERTEX_ATTRIBS' : 8,
-	'WEBGL_depth_texture': false
+	// 'WEBGL_depth_texture': false,
+	'OES_texture_float': false,
+	'OES_texture_half_float': false
 };
 
 // Shim the canvas
@@ -29,10 +31,15 @@ HTMLCanvasElement.prototype.getContext = function(name) {
 		gl = makeControlledWebGLContext(gl);
 
 		logContextAttributes(gl);
+		logSupportedExtensions(gl);
 
 		return gl;
 	}
 	return getContext.apply(this, arguments);
+}
+
+function logSupportedExtensions(gl) {
+	console.log(gl.getSupportedExtensions(gl));
 }
 
 function logContextAttributes(gl) {
