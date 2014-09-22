@@ -332,7 +332,7 @@
 			'	vec3 v = normalize(-vPos.xyz);',
 			'	vec3 Lout = vec3(0.0);',
 			
-			'	float Li = 3.0;',  // Intensity
+			'	float Li = 5.0;',  // Intensity
 
 			'	vec3 l = normalize(vLightPosition.xyz - vPos.xyz);',  // Point-to-light
 			'	vec3 h = normalize(v + l);',  // Half vector
@@ -490,16 +490,12 @@
 
 		shader.setBit('fs', 'main', [
 			shader.getBit('fs', 'main'),
-			'if(uHDR == 1) color *= step(1.0, color);',
+			'if(uHDR == 1) {',
+			'	color *= step(1.0, color);',
+			'}',
+			packBits.main,
 		].join('\n'));
 
-		if(textureType == gl.UNSIGNED_BYTE) {
-			shader.setBit('fs', 'main', [
-				shader.getBit('fs', 'main'),
-				'if(uHDR == 1) color *= step(1.0, color);',
-				packBits.main,
-			].join('\n'));
-		}
 
 		shader.compileProgram(gl);
 	}
@@ -563,7 +559,7 @@
 			shader.setBit('fs', 'main', [
 				'float blur = 1.0 / float(size);',
 
-				'color = unpackFromTexture(uTexture, vTexCoord - vec2(4.0 * blur, 4.0 * blur) * dir) * 0.0162162162;',
+				'color += unpackFromTexture(uTexture, vTexCoord - vec2(4.0 * blur, 4.0 * blur) * dir) * 0.0162162162;',
 				'color += unpackFromTexture(uTexture, vTexCoord - vec2(3.0 * blur, 3.0 * blur) * dir) * 0.0540540541;',
 				'color += unpackFromTexture(uTexture, vTexCoord - vec2(2.0 * blur, 2.0 * blur) * dir) * 0.1216216216;',
 				'color += unpackFromTexture(uTexture, vTexCoord - vec2(blur, blur) * dir) * 0.1945945946;',
@@ -579,6 +575,32 @@
 
 		shader.compileProgram(gl);
 
+
+
+		// Quadshader
+		var quadShader = new Shader();
+
+		quadShader.setBit('fs', 'front', [
+			'uniform sampler2D uTexture;',
+			unpackBits.front,
+			packBits.front,
+		].join('\n'));
+
+		quadShader.setBit('fs', 'main', [
+			'color = texture2D(uTexture, vTexCoord).rgb;',
+		].join('\n'));
+
+		if(textureType == gl.UNSIGNED_BYTE) {
+			quadShader.setBit('fs', 'main', [
+				'color = unpackFromTexture(uTexture, vTexCoord).rgb;',
+				packBits.main,
+			].join('\n'));			
+		}
+
+		quadShader.compileProgram(gl);
+
+
+
 		var extraTexture = gl.createTexture();
 		gl.bindTexture(gl.TEXTURE_2D, extraTexture);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -586,9 +608,18 @@
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
+		var extraTexture2 = gl.createTexture();
+		gl.bindTexture(gl.TEXTURE_2D, extraTexture2);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
 		gl.downsampleAndBlur = {
 			shader: shader,
-			extraTexture: extraTexture
+			quadShader: quadShader,
+			extraTexture: extraTexture,
+			extraTexture2: extraTexture2
 		};
 	}
 
@@ -597,6 +628,8 @@
 		bindScene(gl, gl.downsampleAndBlur.shader, gl.quad);
 
 		var factor = factor || 2;
+		var horizontal = [1,0];
+		var vertical = [0,1];
 
 		// Gotta bind the matrices since that doesn't happen in bindScene()
 		var matrix = mat4.create();
@@ -605,6 +638,17 @@
 		gl.uniformMatrix4fv(gl.downsampleAndBlur.shader.uniform.uP, false, matrix);
 
 
+		
+		// Create the half size depth buffer
+		var halfSizeDepthbuffer = gl.createRenderbuffer();
+		gl.bindRenderbuffer(gl.RENDERBUFFER, halfSizeDepthbuffer);
+		gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, gl.texSize / factor, gl.texSize / factor);
+		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, halfSizeDepthbuffer);
+		
+
+
+
+		// Blur X
 		gl.bindTexture(gl.TEXTURE_2D, gl.downsampleAndBlur.extraTexture);
 		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.texSize / factor, gl.texSize / factor, 0, gl.RGBA, textureType, null);
 
@@ -617,37 +661,74 @@
 		gl.activeTexture(gl.TEXTURE0 + 1);
 		gl.bindTexture(gl.TEXTURE_2D, gl.downsampleAndBlur.extraTexture);
 		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.texSize / factor, gl.texSize / factor, 0, gl.RGBA, textureType, null);
-		// Create the depth buffer
-		var halfSizeDepthbuffer = gl.createRenderbuffer();
-		gl.bindRenderbuffer(gl.RENDERBUFFER, halfSizeDepthbuffer);
-		gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, gl.texSize / factor, gl.texSize / factor);
-		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, halfSizeDepthbuffer);
 
 		gl.viewport(0, 0, gl.texSize / factor, gl.texSize / factor);
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 		
 
-
-		var horizontal = [1,0];
-		var vertical = [0,1];
-
-		// Blur X
 		gl.uniform2fv(gl.downsampleAndBlur.shader.uniform.dir, vertical);
 		gl.drawElements(gl.TRIANGLES, gl.quad.indices.length, gl.UNSIGNED_SHORT, 0);
 
+
+
+
+
+
+
 		// Blur Y
+		gl.bindTexture(gl.TEXTURE_2D, gl.downsampleAndBlur.extraTexture2);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.texSize / factor, gl.texSize / factor, 0, gl.RGBA, textureType, null);
+
 		gl.activeTexture(gl.TEXTURE0);
 		gl.bindTexture(gl.TEXTURE_2D, gl.downsampleAndBlur.extraTexture);
 
+		gl.uniform1i(gl.downsampleAndBlur.shader.uniform.size, gl.texSize/factor);
+
+		chooseRenderTarget(gl, gl.downsampleAndBlur.extraTexture2);
+		gl.activeTexture(gl.TEXTURE0 + 1);
+		gl.bindTexture(gl.TEXTURE_2D, gl.downsampleAndBlur.extraTexture2);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.texSize / factor, gl.texSize / factor, 0, gl.RGBA, textureType, null);
+
+		gl.viewport(0, 0, gl.texSize / factor, gl.texSize / factor);
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+		
+
+		gl.uniform2fv(gl.downsampleAndBlur.shader.uniform.dir, horizontal);
+		gl.drawElements(gl.TRIANGLES, gl.quad.indices.length, gl.UNSIGNED_SHORT, 0);
+
+
+
+
+
+
+
+
+
+
+
+		gl.useProgram(gl.downsampleAndBlur.quadShader.program);
+		bindScene(gl, gl.downsampleAndBlur.quadShader, gl.quad);
+		gl.uniformMatrix4fv(gl.downsampleAndBlur.quadShader.uniform.uM, false, matrix);
+		gl.uniformMatrix4fv(gl.downsampleAndBlur.quadShader.uniform.uV, false, matrix);
+		gl.uniformMatrix4fv(gl.downsampleAndBlur.quadShader.uniform.uP, false, matrix);
+
 		chooseRenderTarget(gl, textureTarget);
+
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, gl.downsampleAndBlur.extraTexture2);
+
 		// Go back to normal size
 		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, gl.depthBuffer);
 		
 		gl.viewport(0, 0, gl.texSize, gl.texSize);
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-		gl.uniform2fv(gl.downsampleAndBlur.shader.uniform.dir, horizontal);
 		gl.drawElements(gl.TRIANGLES, gl.quad.indices.length, gl.UNSIGNED_SHORT, 0);
+
+
+
+
+
 
 
 		gl.useProgram(shader.program);
