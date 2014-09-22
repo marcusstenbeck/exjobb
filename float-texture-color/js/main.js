@@ -56,13 +56,13 @@
 			shadowMapDrawBit(gl);
 		}
 
-		drawScene(gl);//, scene.camera.uV, scene.camera.uP);
+		drawScene(gl);
 
 		drawDepthMap(gl);
 	}
 
 	function drawDepthMap(gl) {
-		// drawTexturedQuad(gl, gl.depthTexture, 0, 0, 128, 128);
+		// drawTexturedQuad(gl, gl.colorTexture, 0, 0, 128, 128);
 
 		// switch back to our shader
 		gl.useProgram(shader.program);
@@ -70,7 +70,7 @@
 		// make sure the depth texture is
 		// bound to texture slot 0
 		gl.activeTexture(gl.TEXTURE0);
-		gl.bindTexture(gl.TEXTURE_2D, gl.depthTexture);
+		gl.bindTexture(gl.TEXTURE_2D, gl.colorTexture);
 	}
 
 //-------------------------------------------------//
@@ -135,27 +135,9 @@
 			'	gl_Position = vPos;',
 			'}'
 		].join('\n');
-		
 
 		shader.setBit('fs', 'front', [
 			'uniform sampler2D uDepthTexture;',
-
-			'vec3 valueToRGB(float value) {',
-			'	vec3 rgb = vec3(0.0);',
-			'	float width = 1.0/7.0;',
-			'	rgb.r = clamp(min(1.0, mix(0.0, 1.0, value / width)) * min(1.0, mix(1.0, 0.0, (value - 2.0*width) / width)), 0.0, 1.0) + clamp(min(1.0, mix(0.0, 1.0, (value - 5.0*width) / width)), 0.0, 1.0);',
-			'	rgb.g = clamp(min(1.0, mix(0.0, 1.0, (value - width) / width)) * min(1.0, mix(1.0, 0.0, (value - 4.0*width) / width)), 0.0, 1.0) + clamp(min(1.0, mix(0.0, 1.0, (value - 6.0*width) / width)), 0.0, 1.0);',
-			'	rgb.b = clamp(min(1.0, mix(0.0, 1.0, (value - 3.0*width) / width)) * min(1.0, mix(1.0, 0.0, (value - 6.0*width) / width)), 0.0, 1.0) + clamp(min(1.0, mix(0.0, 1.0, (value - 6.0*width) / width)), 0.0, 1.0);',
-			'	return rgb;',
-			'}',
-		].join('\n'));
-
-		shader.setBit('fs', 'main', [
-			'vec3 depth = vPos.xyz / vPos.w;',
-			'depth = depth * 0.5 + 0.5;',
-			'float depthValue = texture2D(uDepthTexture, depth.xy).r;',
-
-			'ambient = vec4(valueToRGB(depthValue), 1.0);'
 		].join('\n'));
 
 		console.log(shader.getVertSource());
@@ -220,11 +202,12 @@
 		// The type of shadow mapping
 		gl.shadowMappingType = 'packed_8_bit_texture';
 
-		var textureType = gl.UNSIGNED_BYTE;
-
 		gl.floatTextureExt = gl.getExtension('OES_texture_float');
 		gl.halfFloatTextureExt = gl.getExtension('OES_texture_half_float');
 
+		
+		var textureType = gl.UNSIGNED_BYTE;
+		
 		if(gl.floatTextureExt) {
 			gl.shadowMappingType = 'float_texture';
 			textureType = gl.FLOAT;
@@ -235,8 +218,8 @@
 		}
 
 		// Create a color texture used for depth
-		gl.depthTexture = gl.createTexture();
-		gl.bindTexture(gl.TEXTURE_2D, gl.depthTexture);
+		gl.colorTexture = gl.createTexture();
+		gl.bindTexture(gl.TEXTURE_2D, gl.colorTexture);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -252,11 +235,11 @@
 		// Create the framebuffer
 		gl.framebuffer = gl.createFramebuffer();
 		gl.bindFramebuffer(gl.FRAMEBUFFER, gl.framebuffer);
-		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, gl.depthTexture, 0);
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, gl.colorTexture, 0);
 		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, gl.depthBuffer);
 
 		
-
+		// TODO: explain this
 		gl.shadowMapShader = new Shader();
 		gl.shadowMapShader._vertSrc = [
 			'attribute vec3 aVertexPosition;',
@@ -275,92 +258,100 @@
 			'	gl_Position = vPos;',
 			'}'
 		].join('\n');
-		
 
-		gl.shadowMapShader.setBit('fs', 'front', [
+		gl.shadowMapShader._fragSrc = [
+			'varying vec4 vPos;',
+
+			'//begin(front)',
 			'uniform sampler2D uDepthTexture;',
+			'//end(front)',
 
-			'vec3 floatToRGB(float value) {',
-			'	vec3 rgb = vec3(0.0);',
-			'	float width = 1.0/7.0;',
-			'	rgb.r = clamp(min(1.0, mix(0.0, 1.0, value / width)) * min(1.0, mix(1.0, 0.0, (value - 2.0*width) / width)), 0.0, 1.0) + clamp(min(1.0, mix(0.0, 1.0, (value - 5.0*width) / width)), 0.0, 1.0);',
-			'	rgb.g = clamp(min(1.0, mix(0.0, 1.0, (value - width) / width)) * min(1.0, mix(1.0, 0.0, (value - 4.0*width) / width)), 0.0, 1.0) + clamp(min(1.0, mix(0.0, 1.0, (value - 6.0*width) / width)), 0.0, 1.0);',
-			'	rgb.b = clamp(min(1.0, mix(0.0, 1.0, (value - 3.0*width) / width)) * min(1.0, mix(1.0, 0.0, (value - 6.0*width) / width)), 0.0, 1.0) + clamp(min(1.0, mix(0.0, 1.0, (value - 6.0*width) / width)), 0.0, 1.0);',
-			'	return rgb;',
+			'void main(void) {',
+
+			'	vec4 ambient = vec4(0.0);',
+			
+			'	//begin(main)',
+			'	//end(main)',
+
+			'	gl_FragColor = ambient;',
 			'}',
-		].join('\n'));
+		].join('\n');
 
-		gl.shadowMapShader.setBit('fs', 'main', [
+		var exponent = '8.0';
+
+		var fsMainBit = [
 			'vec3 depth = vPos.xyz / vPos.w;',
 			'depth = depth * 0.5 + 0.5;',
+			'vec3 color = pow(vPos.xyz * 0.5 + 0.5, vec3(' + exponent + '));',
+		].join('\n');
 
-			'ambient = vec4(vec3(depth.z), 1.0);'
+		var fsFrontBit = '';
+		
+		shader.setBit('fs', 'main', [
+			'vec3 depth = vPos.xyz / vPos.w;',
+			'depth = depth * 0.5 + 0.5;',
+			'vec4 color = texture2D(uDepthTexture, depth.xy);',
 		].join('\n'));
-
-
-		var fsMainBit = '';
-
+		
 		if(gl.shadowMappingType === 'packed_8_bit_texture') {
-			gl.shadowMapShader.setBit('fs', 'front', [
-				'vec4 pack (float depth) {',
-				'	const vec4 bitSh = vec4(256 * 256 * 256,',
-				'							256 * 256,',
-				'							256,',
-				'							1.0);',
-				'	const vec4 bitMsk = vec4(0,',
-				'							1.0 / 256.0,',
-				'							1.0 / 256.0,',
-				'							1.0 / 256.0);',
-				'	vec4 comp = fract(depth * bitSh);',
-				'	comp -= comp.xxyz * bitMsk;',
-				'	return comp;',
+
+			// Float textures not supported, so pack dem colors!
+
+			fsFrontBit = [
+				'vec4 packColor(vec3 color) {',
+				'	float maxColor = max(max(color.r, color.g), color.b);',
+				'	float exponent = ceil(log(maxColor) / log(2.0));',
+				'	float scaledExp = (exponent + 128.0) / 255.0;',
+				'	float f = pow(2.0, exponent);',
+				'	return vec4(color / f, scaledExp);',
 				'}',
-			].join('\n'));
+			].join('\n');
 
 			fsMainBit = [
-				'vec3 depth = vPos.xyz / vPos.w;',
-				'depth = depth * 0.5 + 0.5;',
-
-				'ambient = pack(depth.z);',
-				'diffuse = vec4(0.0);',
-				'specular = vec4(0.0);',
+				fsMainBit,
+				'ambient = packColor(color);',
 			].join('\n');
 
 
-
-			// make sure the main shader unpacks the values
 			shader.setBit('fs', 'front', [
 				shader.getBit('fs', 'front'),
-				
-				'float unpack (vec4 colour)',
-				'{',
-				'	const vec4 bitShifts = vec4(1.0 / (256.0 * 256.0 * 256.0),',
-				'								1.0 / (256.0 * 256.0),',
-				'								1.0 / 256.0,',
-				'								1);',
-				'	return dot(colour, bitShifts);',
+
+				'vec3 unpackColor(vec4 color) {',
+				'	float exponent = color.a * 255.0 - 128.0;',
+				'	float f = pow(2.0, exponent);',
+				'	return color.rgb * f;',
 				'}',
 			].join('\n'));
 
 			shader.setBit('fs', 'main', [
-				'vec3 depth = vPos.xyz / vPos.w;',
-				'depth = depth * 0.5 + 0.5;',
-				'float depthValue = unpack(texture2D(uDepthTexture, depth.xy));',
+				shader.getBit('fs', 'main'),
 
-				'ambient = vec4(valueToRGB(depthValue), 1.0);',
+				'ambient = vec4(pow(unpackColor(color), vec3(1.0/' + exponent + ')), 1.0);',
 			].join('\n'));
 
-			shader.compileProgram(gl);
-			gl.useProgram(shader.program);
 		} else {
-			fsMainBit = [
-				'vec3 depth = vPos.xyz / vPos.w;',
-				'depth = depth * 0.5 + 0.5;',
 
-				'ambient = vec4(vec3(depth.z), 1.0);'
+			// Render to texture
+			fsMainBit = [
+				fsMainBit,
+
+				'ambient = vec4(color, 1.0);'
 			].join('\n');
+
+			// Read from texture
+			// Scale the values down
+			shader.setBit('fs', 'main', [
+				shader.setBit('fs', 'main'),
+
+				'ambient = vec4(pow(color.rgb, vec3(1.0/' + exponent + ')), 1.0);',
+			].join('\n'));
 		}
 		
+		console.log('das shad', shader.getFragSource());
+		shader.compileProgram(gl);
+		gl.useProgram(shader.program);
+		
+		gl.shadowMapShader.setBit('fs', 'front', fsFrontBit);
 		gl.shadowMapShader.setBit('fs', 'main', fsMainBit);
 
 		gl.shadowMapShader.compileProgram(gl);

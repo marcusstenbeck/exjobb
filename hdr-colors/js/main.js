@@ -5,6 +5,38 @@
 	var canvasWidth = 768;
 	var canvasHeight = 512;
 
+	var packBits = {
+		front: [
+			'vec4 packColor(vec3 color) {',
+			'	float maxColor = max(max(color.r, color.g), color.b);',
+			'	float exponent = ceil(log(maxColor) / log(2.0));',
+			'	float scaledExp = (exponent + 128.0) / 255.0;',
+			'	float f = pow(2.0, exponent);',
+			'	return vec4(color / f, scaledExp);',
+			'}',
+		].join('\n'),
+		
+		main: [
+			'vec4 packedColor = packColor(color);',
+			'color = packedColor.rgb;',
+			'alpha = packedColor.a;',
+		].join('\n')
+	};
+	
+	var unpackBits = {
+		front: [
+			'vec3 unpackColor(vec4 color) {',
+			'	float exponent = color.a * 255.0 - 128.0;',
+			'	float f = pow(2.0, exponent);',
+			'	return color.rgb * f;',
+			'}',
+
+			'vec3 unpackFromTexture(sampler2D texture, vec2 tc) {',
+			'	return unpackColor(texture2D(texture, tc));',
+			'}',
+		].join('\n'),
+	};
+
 	function interleaveData(data) {
 		/*
 			Expects data in format
@@ -138,6 +170,25 @@
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Int16Array(scene.model.indices), gl.STATIC_DRAW);
 
 
+		// Load test texture
+		scene.model.material = {};
+		scene.model.material.img = new Image();
+		scene.model.material.img.src = 'js/assets/ash_uvgrid02_512.jpg';
+		scene.model.material.img.onload = function() {
+			scene.model.material.texture = gl.createTexture();
+			gl.activeTexture(gl.TEXTURE0+2);
+			gl.bindTexture(gl.TEXTURE_2D, scene.model.material.texture);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, scene.model.material.img);
+			gl.activeTexture(gl.TEXTURE0);
+		};
+
+
+		
+
 		/**
 		 *  Camera setup
 		 */
@@ -159,10 +210,6 @@
 		 *  Build and setup shader program
 		 */
 		window.shader = new Shader();
-
-		shader.setBit('fs', 'main', [
-			'//ambient += vec4(vec3(0.05), 1.0);',
-		].join('\n'));
 
 		shader.compileProgram(gl);
 		gl.useProgram(shader.program);
@@ -231,6 +278,8 @@
 
 		// Perspective transform
 		gl.uniformMatrix4fv(shader.uniform.uP, false, scene.camera.uP);
+
+		gl.uniform1i(shader.uniform.uTexture, 2);
 	}
 
 	function drawScene(gl, textureTarget) {
@@ -261,25 +310,29 @@
 		 */
 
 		shader.setBit('vs', 'front', [
+			shader.getBit('vs', 'front'),
 			'uniform vec3 uLightPosition;',
 			'varying vec4 vLightPosition;',
 		].join('\n'));
 
 		shader.setBit('vs', 'main', [
+			shader.getBit('vs', 'main'),
 			'vLightPosition = uV * vec4(uLightPosition, 1.0);',
 		].join('\n'));
 
 		shader.setBit('fs', 'front', [
+			'uniform sampler2D uTexture;',
+			
 			'varying vec4 vLightPosition;',
 			'uniform vec3 uLightColor;',
 
-			'vec4 calculateLight() {',
+			'vec3 calculateLight(vec3 diffuse, vec3 specular) {',
 
 			'	vec3 n = normalize(vNormal);',
 			'	vec3 v = normalize(-vPos.xyz);',
 			'	vec3 Lout = vec3(0.0);',
 			
-			'	float Li = 2.0;',  // Intensity
+			'	float Li = 3.0;',  // Intensity
 
 			'	vec3 l = normalize(vLightPosition.xyz - vPos.xyz);',  // Point-to-light
 			'	vec3 h = normalize(v + l);',  // Half vector
@@ -294,19 +347,20 @@
 			'	float attenuation = 1.0 / (constantAttenuation + (linearAttenuation * dist) + (quadraticAttenuation * dist * dist));',
 			
 			'	float m = 30.0;',  // Smoothness from Real-Time Rendering
-			'	float Kd = 1.0 / PI;',
-			'	float Ks = (m + 8.0) / (8.0 * PI);', // Specual not affected by attenuation
+			'	vec3 Kd = diffuse / PI;',
+			'	vec3 Ks = specular * ((m + 8.0) / (8.0 * PI));', // Specual not affected by attenuation
 
 			'	Lout += vec3( Kd + (Ks * pow(cosTh, m)) ) * Li * cosTi * attenuation;',
 
-			'	return vec4(Lout, 1.0);',
+			'	return Lout;',
 			'}',
 		].join('\n'));
-
+	
 		shader.setBit('fs', 'main', [
-			shader.getBit('fs', 'main'),
-			'diffuse += calculateLight();',
+			'vec4 texColor = texture2D(uTexture, vTexCoord);',
+			'color += calculateLight(texColor.rgb, texColor.rgb);',
 		].join('\n'));
+	
 
 		shader.compileProgram(gl);
 		gl.useProgram(shader.program);
@@ -333,16 +387,11 @@
 	function HDRSetup(gl) {
 		gl.texSize = 512;
 
-		gl.floatTextureExt = gl.getExtension('OES_texture_float');
-		gl.floatTextureLinearExt = gl.getExtension('OES_texture_float_linear');
-
-		if(gl.floatTextureExt) {
+		if(textureType == gl.FLOAT) {
 			var hasLinearExt = gl.floatTextureLinearExt ? true : false;
 			HDRSetupFloatTexture(gl, gl.texSize, gl.FLOAT, hasLinearExt);
-			window.textureType = gl.FLOAT;
 		} else {
 			HDRSetup8BitTexture(gl, gl.texSize, gl.UNSIGNED_BYTE);
-			window.textureType = gl.UNSIGNED_BYTE;
 		}
 	}
 
@@ -390,7 +439,7 @@
 
 		shader.setBit('fs', 'main', [
 			shader.getBit('fs', 'main'),
-			'if(uHDR == 1) diffuse *= step(1.0, diffuse);'
+			'if(uHDR == 1) color *= step(1.0, color);',
 		].join('\n'));
 
 		shader.compileProgram(gl);
@@ -436,12 +485,21 @@
 		shader.setBit('fs', 'front', [
 			shader.getBit('fs', 'front'),
 			'uniform int uHDR;',
+			packBits.front,
 		].join('\n'));
 
 		shader.setBit('fs', 'main', [
 			shader.getBit('fs', 'main'),
-			'if(uHDR == 1) diffuse *= step(1.0, diffuse);'
+			'if(uHDR == 1) color *= step(1.0, color);',
 		].join('\n'));
+
+		if(textureType == gl.UNSIGNED_BYTE) {
+			shader.setBit('fs', 'main', [
+				shader.getBit('fs', 'main'),
+				'if(uHDR == 1) color *= step(1.0, color);',
+				packBits.main,
+			].join('\n'));
+		}
 
 		shader.compileProgram(gl);
 	}
@@ -479,17 +537,45 @@
 		// https://gitorious.org/gluon/gluon/source/f64961dbea07b31fe5292900deaf09716bb196ba:graphics/shaders/GLSL/mosaic.frag
 		shader.setBit('fs', 'main', [
 			'float blur = 1.0 / float(size);',
+			'vec4 texColor = vec4(0.0);',
 
-			'diffuse += texture2D(uTexture, vTexCoord - vec2(4.0 * blur, 4.0 * blur) * dir) * 0.0162162162;',
-			'diffuse += texture2D(uTexture, vTexCoord - vec2(3.0 * blur, 3.0 * blur) * dir) * 0.0540540541;',
-			'diffuse += texture2D(uTexture, vTexCoord - vec2(2.0 * blur, 2.0 * blur) * dir) * 0.1216216216;',
-			'diffuse += texture2D(uTexture, vTexCoord - vec2(blur, blur) * dir) * 0.1945945946;',
-			'diffuse += texture2D(uTexture, vTexCoord) * 0.2270270270;',
-			'diffuse += texture2D(uTexture, vTexCoord + vec2(blur, blur) * dir) * 0.1945945946;',
-			'diffuse += texture2D(uTexture, vTexCoord + vec2(2.0 * blur, 2.0 * blur) * dir) * 0.1216216216;',
-			'diffuse += texture2D(uTexture, vTexCoord + vec2(3.0 * blur, 3.0 * blur) * dir) * 0.0540540541;',
-			'diffuse += texture2D(uTexture, vTexCoord + vec2(4.0 * blur, 4.0 * blur) * dir) * 0.0162162162;',
+			'texColor += texture2D(uTexture, vTexCoord - vec2(4.0 * blur, 4.0 * blur) * dir) * 0.0162162162;',
+			'texColor += texture2D(uTexture, vTexCoord - vec2(3.0 * blur, 3.0 * blur) * dir) * 0.0540540541;',
+			'texColor += texture2D(uTexture, vTexCoord - vec2(2.0 * blur, 2.0 * blur) * dir) * 0.1216216216;',
+			'texColor += texture2D(uTexture, vTexCoord - vec2(blur, blur) * dir) * 0.1945945946;',
+			'texColor += texture2D(uTexture, vTexCoord) * 0.2270270270;',
+			'texColor += texture2D(uTexture, vTexCoord + vec2(blur, blur) * dir) * 0.1945945946;',
+			'texColor += texture2D(uTexture, vTexCoord + vec2(2.0 * blur, 2.0 * blur) * dir) * 0.1216216216;',
+			'texColor += texture2D(uTexture, vTexCoord + vec2(3.0 * blur, 3.0 * blur) * dir) * 0.0540540541;',
+			'texColor += texture2D(uTexture, vTexCoord + vec2(4.0 * blur, 4.0 * blur) * dir) * 0.0162162162;',
+
+			'color = texColor.rgb;',
+			'alpha = texColor.a;',
 		].join('\n'));
+
+		if(textureType == gl.UNSIGNED_BYTE) {
+			shader.setBit('fs', 'front', [
+				shader.getBit('fs', 'front'),
+				packBits.front,
+				unpackBits.front,
+			].join('\n'));
+
+			shader.setBit('fs', 'main', [
+				'float blur = 1.0 / float(size);',
+
+				'color = unpackFromTexture(uTexture, vTexCoord - vec2(4.0 * blur, 4.0 * blur) * dir) * 0.0162162162;',
+				'color += unpackFromTexture(uTexture, vTexCoord - vec2(3.0 * blur, 3.0 * blur) * dir) * 0.0540540541;',
+				'color += unpackFromTexture(uTexture, vTexCoord - vec2(2.0 * blur, 2.0 * blur) * dir) * 0.1216216216;',
+				'color += unpackFromTexture(uTexture, vTexCoord - vec2(blur, blur) * dir) * 0.1945945946;',
+				'color += unpackFromTexture(uTexture, vTexCoord) * 0.2270270270;',
+				'color += unpackFromTexture(uTexture, vTexCoord + vec2(blur, blur) * dir) * 0.1945945946;',
+				'color += unpackFromTexture(uTexture, vTexCoord + vec2(2.0 * blur, 2.0 * blur) * dir) * 0.1216216216;',
+				'color += unpackFromTexture(uTexture, vTexCoord + vec2(3.0 * blur, 3.0 * blur) * dir) * 0.0540540541;',
+				'color += unpackFromTexture(uTexture, vTexCoord + vec2(4.0 * blur, 4.0 * blur) * dir) * 0.0162162162;',
+				
+				packBits.main,
+			].join('\n'));
+		}
 
 		shader.compileProgram(gl);
 
@@ -576,14 +662,23 @@
 
 		shader.setBit('fs', 'front', [
 			'uniform sampler2D uTextureA;',
-			'uniform sampler2D uTextureB;'
+			'uniform sampler2D uTextureB;',
+			unpackBits.front,
 		].join('\n'));
 
 		shader.setBit('fs', 'main', [
-			'vec4 luminance = texture2D(uTextureA, vTexCoord) + texture2D(uTextureB, vTexCoord);',
+			'vec3 luminance = texture2D(uTextureA, vTexCoord).rgb + texture2D(uTextureB, vTexCoord).rgb;',
 			'float Lwhite = 1.0;',
-			'diffuse = (luminance * (1.0 + (luminance / pow(Lwhite, 2.0)))) / (1.0 + luminance);',
+			'color = (luminance * (1.0 + (luminance / pow(Lwhite, 2.0)))) / (1.0 + luminance);',
 		].join('\n'));
+
+		if(textureType == gl.UNSIGNED_BYTE) {
+			shader.setBit('fs', 'main', [
+				'vec3 luminance = unpackFromTexture(uTextureA, vTexCoord).rgb + unpackFromTexture(uTextureB, vTexCoord).rgb;',
+				'float Lwhite = 1.0;',
+				'color = (luminance * (1.0 + (luminance / pow(Lwhite, 2.0)))) / (1.0 + luminance);',
+			].join('\n'));			
+		}
 
 		shader.compileProgram(gl);
 
@@ -642,6 +737,15 @@
 
 	window.gl = init();
 	window.scene = {};
+
+	gl.floatTextureExt = gl.getExtension('OES_texture_float');
+	gl.floatTextureLinearExt = gl.getExtension('OES_texture_float_linear');
+
+	if(gl.floatTextureExt) {
+		window.textureType = gl.FLOAT;
+	} else {
+		window.textureType = gl.UNSIGNED_BYTE;
+	}
 
 	setupQuad(gl);
 	setupScene(gl);
