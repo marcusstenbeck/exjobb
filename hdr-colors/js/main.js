@@ -79,15 +79,19 @@
 	function draw(uV, uP) {
 
 		HDRDrawBit(gl, gl.pingColorTexture); // Draw high values to ping
+
 		// Downsample and blur (median filter) to pong
 		downsampleAndBlurBit(gl, gl.pingColorTexture, gl.pongColorTexture, 8);
+
 		// Draw scene to ping
 		drawScene(gl, gl.pingColorTexture);
+
 		// Additive blend ping+pong to screen
 		additiveBlendBit(gl, gl.pingColorTexture, gl.pongColorTexture);
 
-		// drawTexQuad(gl, gl.pingColorTexture, 512, 256, 256, 256);
-		// drawTexQuad(gl, gl.pongColorTexture, 512, 0, 256, 256);
+
+		drawTexQuad(gl, gl.pingColorTexture, 512, 256, 256, 256);
+		drawTexQuad(gl, gl.pongColorTexture, 512, 0, 256, 256);
 	}
 
 	function drawTexQuad(gl, textureTarget, locx, locy, width, height) {
@@ -307,20 +311,18 @@
 		shader.compileProgram(gl);
 		gl.useProgram(shader.program);
 
+		lightUpdate(12345999);
 	}
-
-	// function lightDraw(gl) {
-	// }
 
 	function lightUpdate(time) {
 		var dist = 10;
-		var lightRadius = 5.0;
+		var lightHeight = 5.0;
 		var rad = 40;
-		var timeFactor = -time/500;
+		var timeFactor = time/10000;
 		gl.uniform3fv(shader.uniform.uLightPosition, vec3.fromValues(
-			rad * Math.sin( timeFactor ),
-			lightRadius + dist * Math.cos(timeFactor/10),
-			rad * Math.cos( timeFactor )
+			rad * Math.sin( timeFactor - 150 ),
+			lightHeight,
+			rad * Math.cos( timeFactor - 150 )
 		));
 	}
 
@@ -331,6 +333,23 @@
 	function HDRSetup(gl) {
 		gl.texSize = 512;
 
+		gl.floatTextureExt = gl.getExtension('OES_texture_float');
+		gl.floatTextureLinearExt = gl.getExtension('OES_texture_float_linear');
+
+		if(gl.floatTextureExt) {
+			var hasLinearExt = gl.floatTextureLinearExt ? true : false;
+			HDRSetupFloatTexture(gl, gl.texSize, gl.FLOAT, hasLinearExt);
+			window.textureType = gl.FLOAT;
+		} else {
+			HDRSetup8BitTexture(gl, gl.texSize, gl.UNSIGNED_BYTE);
+			window.textureType = gl.UNSIGNED_BYTE;
+		}
+	}
+
+	function HDRSetupFloatTexture(gl, texSize, textureType, hasLinearExt) {
+		// Set up HDR rendering with float textures
+		console.log('float textures, linear is', hasLinearExt);
+
 		// Create ping color texture
 		gl.pingColorTexture = gl.createTexture();
 		gl.activeTexture(gl.TEXTURE0);
@@ -339,7 +358,7 @@
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.texSize, gl.texSize, 0, gl.RGBA, textureType, null);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texSize, texSize, 0, gl.RGBA, textureType, null);
 
 		// Create pong color texture
 		gl.pongColorTexture = gl.createTexture();
@@ -349,13 +368,63 @@
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.texSize, gl.texSize, 0, gl.RGBA, textureType, null);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texSize, texSize, 0, gl.RGBA, textureType, null);
 
 
 		// Create the depth buffer
 		gl.depthBuffer = gl.createRenderbuffer();
 		gl.bindRenderbuffer(gl.RENDERBUFFER, gl.depthBuffer);
-		gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, gl.texSize, gl.texSize);
+		gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, texSize, texSize);
+
+		// Create the framebuffer
+		gl.framebuffer = gl.createFramebuffer();
+		gl.bindFramebuffer(gl.FRAMEBUFFER, gl.framebuffer);
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, gl.pingColorTexture, 0);
+		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, gl.depthBuffer);
+
+
+		shader.setBit('fs', 'front', [
+			shader.getBit('fs', 'front'),
+			'uniform int uHDR;',
+		].join('\n'));
+
+		shader.setBit('fs', 'main', [
+			shader.getBit('fs', 'main'),
+			'if(uHDR == 1) diffuse *= step(1.0, diffuse);'
+		].join('\n'));
+
+		shader.compileProgram(gl);
+	}
+
+	function HDRSetup8BitTexture(gl, texSize, textureType) {
+		// Set up HDR rendering with 8 bit textures
+		console.log('8 bit textures!');
+
+		// Create ping color texture
+		gl.pingColorTexture = gl.createTexture();
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, gl.pingColorTexture);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texSize, texSize, 0, gl.RGBA, textureType, null);
+
+		// Create pong color texture
+		gl.pongColorTexture = gl.createTexture();
+		gl.activeTexture(gl.TEXTURE0 + 1);
+		gl.bindTexture(gl.TEXTURE_2D, gl.pongColorTexture);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texSize, texSize, 0, gl.RGBA, textureType, null);
+
+
+		// Create the depth buffer
+		gl.depthBuffer = gl.createRenderbuffer();
+		gl.bindRenderbuffer(gl.RENDERBUFFER, gl.depthBuffer);
+		gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, texSize, texSize);
 
 		// Create the framebuffer
 		gl.framebuffer = gl.createFramebuffer();
@@ -573,10 +642,6 @@
 
 	window.gl = init();
 	window.scene = {};
-	
-	gl.floatTextureExt = gl.getExtension('OES_texture_float');
-	gl.floatTextureLinearExt = gl.getExtension('OES_texture_float_linear');
-	window.textureType = gl.FLOAT;
 
 	setupQuad(gl);
 	setupScene(gl);
