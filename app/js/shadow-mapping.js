@@ -73,7 +73,7 @@
 	}
 
 	function drawDepthMap(gl) {
-		drawTexturedQuad(gl, gl.depthTexture, 0, 0, 128, 128);
+		// drawTexturedQuad(gl, gl.depthTexture, 0, 0, 128, 128);
 
 		// switch back to our shader
 		gl.useProgram(shader.program);
