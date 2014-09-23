@@ -10,7 +10,7 @@ function bindScene(gl, shader, vData) {
 	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Int16Array(vData.indices), gl.STATIC_DRAW);
 	
 	var FLOAT_WIDTH = 4;
-	var theStride = (3+2+3) * FLOAT_WIDTH;
+	var theStride = (3+2+3) * FLOAT_WIDTH; // lol hardcode much lol
 	
 	shader.attribute.aVertexPosition = gl.getAttribLocation(shader.program, 'aVertexPosition');
 	shader.attribute.aVertexTexCoord = gl.getAttribLocation(shader.program, 'aVertexTexCoord');
