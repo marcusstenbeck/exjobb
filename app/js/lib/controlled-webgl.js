@@ -107,7 +107,7 @@ function makeControlledWebGLContext(gl) {
 		}
 	}
 
-	// ###  ONLY USE wrapper (NOT gl) AFTER THIS POINT  ###
+	// ###  ONLY USE `wrapper` (not `gl`) AFTER THIS POINT  ###
 
 	/**
 	 *  Override max vertex attribs
