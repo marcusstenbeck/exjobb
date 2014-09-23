@@ -1,4 +1,7 @@
+'use strict';
+
 var UP_VECTOR = vec3.fromValues(0, 1, 0);
+var time = 0;
 
 function bindScene(gl, shader, vData) {
 
@@ -50,4 +53,27 @@ function bindScene(gl, shader, vData) {
 			(2+3) * FLOAT_WIDTH
 		);
 	}
+}
+
+function init(canvasWidth, canvasHeight) {
+	document.write('<canvas width="' + canvasWidth + '" height="' + canvasHeight + '"></canvas>')
+
+	var canv = document.getElementsByTagName('canvas')[0];
+
+	var requestedContextAttributes = {
+		antialias: false,
+		preserveDrawingBuffer: true
+	};
+
+	try {
+		var gl = canv.getContext('webgl', requestedContextAttributes);
+	} catch (e) {
+		console.error('WebGL is not supported');
+	}
+
+	if(gl) {
+		return gl;
+	}
+
+	return null;
 }

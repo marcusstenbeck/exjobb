@@ -4,31 +4,6 @@
 	var canvasWidth = 2048;
 	var canvasHeight = 128;
 
-
-	function init() {
-		document.write('<canvas width="' + canvasWidth + '" height="' + canvasHeight + '"></canvas>')
-
-		var canv = document.getElementsByTagName('canvas')[0];
-
-		var requestedContextAttributes = {
-			antialias: false
-		};
-
-		try {
-			var gl = canv.getContext('webgl', requestedContextAttributes);
-		} catch (e) {
-			console.error('WebGL is not supported');
-		}
-
-		if(gl) {
-			return gl;
-		}
-
-		return null;
-	}
-
-
-	var time = 0;
 	function update(tpf) {
 		time = time + tpf;
 
@@ -356,7 +331,7 @@
 
 //------------------------------------------------------//
 
-	window.gl = init();
+	window.gl = init(canvasWidth, canvasHeight);
 	window.scene = {};
  	
  	setupScene(gl);
