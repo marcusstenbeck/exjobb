@@ -11,10 +11,10 @@
 		 *  Upload uniforms
 		 */
 		
-		// // Model transform
+		// Model transform
 		gl.uniformMatrix4fv(shader.uniform.uM, false, mat4.create());
 
-		// // Perspective transform
+		// Perspective transform
 		gl.uniformMatrix4fv(shader.uniform.uP, false, scene.camera.uP);
 
 		// Camera
