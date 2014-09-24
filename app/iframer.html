@@ -2,6 +2,34 @@
 <html>
 <head>
 	<title></title>
+	<style type="text/css">
+
+	body {
+		margin: 0;
+		padding: 0 0 0 522px;
+	}
+
+	iframe {
+		position: absolute;
+		top: 0;
+		left: 0;
+		border: solid 5px yellow;
+		-webkit-animation: pulse 1s infinite linear;
+	}
+
+	/* Standard syntax */
+	@-webkit-keyframes pulse {
+		  0% { border-color: yellow; }
+		 50% { border-color: red; }
+		100% { border-color: yellow; }
+	}
+
+	.pancake-ocean {
+		float: left;
+		padding: 1px;
+	}
+
+	</style>
 </head>
 <body>
 <script type="text/javascript" src="js/iframer.js"></script>

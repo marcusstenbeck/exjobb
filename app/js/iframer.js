@@ -1,34 +1,63 @@
 'use strict';
 
-(function() {
 
-	function createIframe() {
-		var iframe = document.createElement('iframe');
-		iframe.width = 512;
-		iframe.height = 512;
+function createIframe(src) {
+	var iframe = document.createElement('iframe');
+	iframe.width = 512;
+	iframe.height = 512;
 
-		iframe.src = 'shadow-mapping.html';
+	iframe.src = src;
 
-		document.body.appendChild(iframe);
+	document.body.appendChild(iframe);
 
-		return iframe;
-	}
+	return iframe;
+}
 
-	function destroyIframe(iframe) {
-		document.body.removeChild(iframe);
-	}
+function reloadIframe(iframe, src) {
+	iframe.src = src;
+}
 
-	// ----------------------------------------------------------
+function destroyIframe(iframe) {
+	document.body.removeChild(iframe);
+}
 
-	var myIframe = createIframe();
+// ----------------------------------------------------------
 
+
+var sequence = [
+	'shadow-mapping.html?t=4000',
+	'shadow-mapping.html?t=4000',
+	'shadow-mapping.html?t=4000',
+	'shadow-mapping.html?t=4000&webgl_depth_texture=0',
+	'shadow-mapping.html?t=4000&webgl_depth_texture=1',
+	'shadow-mapping.html?t=4000',
+	'shadow-mapping.html?t=4000',
+	'shadow-mapping.html?t=4000',
+	'shadow-mapping.html?t=4000&webgl_depth_texture=0',
+	'shadow-mapping.html?t=4000&webgl_depth_texture=1',
+	'shadow-mapping.html',
+];
+
+var myIframe = createIframe();
+
+var dumpImage = function() {
+	var im = new Image();
+	im.src = myIframe.contentWindow.document.body.getElementsByTagName('canvas')[0].toDataURL('image/png');
+	im.width = 128;
+	im.height = 128;
+	im.className = 'pancake-ocean image-' + (i - 1);
+	document.body.appendChild(im);
 	
-	setTimeout(function() {
-		var im = new Image();
-		im.src = myIframe.contentWindow.document.body.getElementsByTagName('canvas')[0].toDataURL('image/png');
-		document.body.appendChild(im);
-		//destroyIframe(myIframe);
-	}, 3000);
+	if(i < sequence.length) {
+		reloadIframe(myIframe, sequence[i]);
+	//	setTimeout(dumpImage, 10);
+	}
 
+	i++;
+}
 
-}).call(this);
+var i = 1;
+reloadIframe(myIframe, sequence[0]);
+myIframe.addEventListener('load', function() {
+	setTimeout(dumpImage, 10);
+});

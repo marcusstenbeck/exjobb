@@ -3,6 +3,17 @@
 var UP_VECTOR = vec3.fromValues(0, 1, 0);
 var time = 0;
 
+var overrideTime = getParameterByName('t') !== '' && +getParameterByName('t') ? +getParameterByName('t') : undefined;
+console.log(typeof overrideTime, overrideTime)
+
+function getParameterByName(name) {
+    name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
+    var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+        results = regex.exec(location.search);
+    return results == null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+}
+
+
 function bindScene(gl, shader, vData) {
 
 	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vData.vertices), gl.STATIC_DRAW);
@@ -76,4 +87,14 @@ function init(canvasWidth, canvasHeight) {
 	}
 
 	return null;
+}
+
+
+function loop(time) {
+	window.requestAnimationFrame(loop);
+
+	if(typeof overrideTime === 'number') time = overrideTime;
+
+	update(time);
+	draw();
 }
