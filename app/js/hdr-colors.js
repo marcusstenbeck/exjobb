@@ -1,7 +1,7 @@
 'use strict';
 (function () {
 
-	var canvasWidth = 768;
+	var canvasWidth = 512;
 	var canvasHeight = 512;
 
 	var packBits = {
@@ -96,8 +96,8 @@
 		additiveBlendBit(gl, gl.pingColorTexture, gl.pongColorTexture);
 
 
-		drawTexQuad(gl, gl.pingColorTexture, 512, 256, 256, 256);
-		drawTexQuad(gl, gl.pongColorTexture, 512, 0, 256, 256);
+		// drawTexQuad(gl, gl.pingColorTexture, 512, 256, 256, 256);
+		// drawTexQuad(gl, gl.pongColorTexture, 512, 0, 256, 256);
 	}
 
 	function drawTexQuad(gl, textureTarget, locx, locy, width, height) {
@@ -315,9 +315,9 @@
 	function HDRSetup(gl) {
 		gl.texSize = 512;
 
-		if(textureType == gl.FLOAT) {
+		if(textureType === gl.HALF_FLOAT_OES || textureType === gl.FLOAT) {
 			var hasLinearExt = gl.floatTextureLinearExt ? true : false;
-			HDRSetupFloatTexture(gl, gl.texSize, gl.FLOAT, hasLinearExt);
+			HDRSetupFloatTexture(gl, gl.texSize, textureType, hasLinearExt);
 		} else {
 			HDRSetup8BitTexture(gl, gl.texSize, gl.UNSIGNED_BYTE);
 		}
@@ -326,6 +326,7 @@
 	function HDRSetupFloatTexture(gl, texSize, textureType, hasLinearExt) {
 		// Set up HDR rendering with float textures
 		console.log('float textures, linear is', hasLinearExt);
+
 
 		// Create ping color texture
 		gl.pingColorTexture = gl.createTexture();
@@ -353,12 +354,44 @@
 		gl.bindRenderbuffer(gl.RENDERBUFFER, gl.depthBuffer);
 		gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, texSize, texSize);
 
+
 		// Create the framebuffer
 		gl.framebuffer = gl.createFramebuffer();
 		gl.bindFramebuffer(gl.FRAMEBUFFER, gl.framebuffer);
 		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, gl.pingColorTexture, 0);
 		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, gl.depthBuffer);
 
+		// Make sure the frambuffer is complete
+		if(gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+			
+			if(textureType === gl.FLOAT) {
+				window.textureType = gl.HALF_FLOAT_OES;
+				textureType = window.textureType;
+
+				// ping: iOS can't draw to gl.FLOAT, try gl.HALF_FLOAT_OES
+				gl.activeTexture(gl.TEXTURE0);
+				gl.bindTexture(gl.TEXTURE_2D, gl.pingColorTexture);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+				gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texSize, texSize, 0, gl.RGBA, textureType, null);
+
+				// pong:
+				gl.activeTexture(gl.TEXTURE0 + 1);
+				gl.bindTexture(gl.TEXTURE_2D, gl.pongColorTexture);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+				gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texSize, texSize, 0, gl.RGBA, textureType, null);
+
+				// Bind texture again
+				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, gl.pingColorTexture, 0);
+			}
+
+			console.log('FB status:', gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE);
+		}
 
 		shader.setBit('fs', 'front', [
 			shader.getBit('fs', 'front'),
@@ -371,6 +404,7 @@
 		].join('\n'));
 
 		shader.compileProgram(gl);
+		gl.useProgram(shader.program);
 	}
 
 	function HDRSetup8BitTexture(gl, texSize, textureType) {
@@ -426,6 +460,7 @@
 
 
 		shader.compileProgram(gl);
+		gl.useProgram(shader.program);
 	}
 
 	function HDRDrawBit(gl, textureTarget) {
@@ -748,10 +783,15 @@
 	window.scene = {};
 
 	gl.floatTextureExt = gl.getExtension('OES_texture_float');
+	gl.halfFloatTextureExt = gl.getExtension('OES_texture_half_float');
 	gl.floatTextureLinearExt = gl.getExtension('OES_texture_float_linear');
 
+	gl.HALF_FLOAT_OES = (gl.halfFloatTextureExt && gl.halfFloatTextureExt.HALF_FLOAT_OES) ? gl.halfFloatTextureExt.HALF_FLOAT_OES : undefined;
+	
 	if(gl.floatTextureExt) {
 		window.textureType = gl.FLOAT;
+	} else if(gl.halfFloatTextureExt) {
+		window.textureType = gl.HALF_FLOAT_OES;
 	} else {
 		window.textureType = gl.UNSIGNED_BYTE;
 	}
