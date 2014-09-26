@@ -2,10 +2,28 @@
 
 var UP_VECTOR = vec3.fromValues(0, 1, 0);
 var time = 0;
-
 var overrideTime = getParameterByName('t') !== '' && +getParameterByName('t') ? +getParameterByName('t') : undefined;
-console.log(typeof overrideTime, overrideTime)
+var webglProfile = getChoke();
 
+
+function getChoke() {
+	var str = getParameterByName('choke');
+	if(!str) return;
+	
+	var toChoke = str.split(',')
+
+	var profile = {};
+	for (var i = toChoke.length - 1; i >= 0; i--) {
+		var key = toChoke[i].split(':')[0].toUpperCase();
+		var value = +toChoke[i].split(':')[1] || false;
+		
+		profile[key] = value;
+	};
+	
+	return profile;
+}
+
+// http://stackoverflow.com/questions/901115/how-can-i-get-query-string-values-in-javascript
 function getParameterByName(name) {
     name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
     var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
@@ -79,7 +97,7 @@ function init(canvasWidth, canvasHeight) {
 	try {
 		var gl = canv.getContext('webgl', requestedContextAttributes);
 	} catch (e) {
-		console.error('WebGL is not supported');
+		console.error('WebGL is not supported', e);
 	}
 
 	if(gl) {

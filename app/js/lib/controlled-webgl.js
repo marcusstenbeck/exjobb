@@ -9,13 +9,131 @@ var strBoilerplate = [
 	].join('\n');
 
 
-	// Create a map of stuff that we're gonna choke
-var choke = {
-	// 'MAX_VERTEX_ATTRIBS' : 8,
-	// 'WEBGL_depth_texture': false,
-	// 'OES_texture_float': false,
-	// 'OES_texture_half_float': false
+// Create a map of stuff that we're gonna choke
+var choke = (typeof webglProfile !== 'undefined') ? (webglProfile) : ({});
+
+// Array where we'll store all log events
+var log = [];
+
+var loggingFn = console.log;
+var warningFn = console.warn || console.log;
+var errorFn = console.error || console.log;
+
+function wrapLog(fn, str) {
+	return function() {
+		var line = str ? [str] : [];
+		for (var i = 0; i < arguments.length; i++) {
+			line.push(arguments[i]);
+		};
+		if(line.length > 0) log.push(line);
+
+		// Chrome already prints WebGL warnings automatically
+		if(typeof arguments[0] === 'string' && arguments[0].slice(0, 6) === 'WebGL:') return;
+
+		fn.apply(this, arguments);
+	};
 };
+
+console.log = wrapLog(loggingFn);
+console.warn = wrapLog(warningFn, 'WARNING: ');
+console.error = wrapLog(errorFn, 'ERROR: ');
+
+function convertArrayToString(arr) {
+	return Array.prototype.join.call(arr);
+}
+
+function convertObjectToString(obj) {
+	var str = '';
+	
+	var key;
+	var value;
+	for(key in obj) {
+
+		switch(typeof obj[key]) {
+			case 'string':
+			case 'number':
+			case 'function':
+			case 'undefined':
+				value = obj[key];
+				break;
+			case 'object':
+				if(obj[key] === null)
+					value = 'null';
+				else if(obj[key] instanceof Array
+					|| obj[key] instanceof Uint8Array
+					|| obj[key] instanceof Uint8ClampedArray
+					|| obj[key] instanceof Uint16Array
+					|| obj[key] instanceof Uint32Array
+					|| obj[key] instanceof Int8Array
+					|| obj[key] instanceof Int16Array
+					|| obj[key] instanceof Int32Array
+					|| obj[key] instanceof Float32Array
+					|| obj[key] instanceof Float64Array) value = convertArrayToString(obj[key]);
+				else value = '{' + convertObjectToString(obj[key]) + '}';
+				break;
+		}
+		
+		str += key + ':' + value + ',';
+	}
+
+	return str;
+}
+
+function getImplementationValues(gl) {
+	return {
+		devicePixelRatio: devicePixelRatio,
+		screen: screen,
+		userAgent: navigator.userAgent,
+		glValues: {
+			SUBPIXEL_BITS:						gl.getParameter(gl.SUBPIXEL_BITS),
+			MAX_TEXTURE_SIZE:					gl.getParameter(gl.MAX_TEXTURE_SIZE),
+			MAX_CUBE_MAP_TEXTURE_SIZE:			gl.getParameter(gl.MAX_CUBE_MAP_TEXTURE_SIZE),
+			SAMPLE_BUFFERS:						gl.getParameter(gl.SAMPLE_BUFFERS),
+			SAMPLES:							gl.getParameter(gl.SAMPLES),
+			RENDERER:							gl.getParameter(gl.RENDERER),
+			SHADING_LANGUAGE_VERSION:			gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+			VENDOR:								gl.getParameter(gl.VENDOR),
+			VERSION:							gl.getParameter(gl.VERSION),
+			MAX_VERTEX_ATTRIBS:					gl.getParameter(gl.MAX_VERTEX_ATTRIBS),
+			MAX_VERTEX_UNIFORM_VECTORS:			gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS),
+			MAX_VARYING_VECTORS:				gl.getParameter(gl.MAX_VARYING_VECTORS),
+			MAX_COMBINED_TEXTURE_IMAGE_UNITS:	gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS),
+			MAX_VERTEX_TEXTURE_IMAGE_UNITS:		gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS),
+			MAX_TEXTURE_IMAGE_UNITS:			gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS),
+			MAX_FRAGMENT_UNIFORM_VECTORS:		gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS),
+			MAX_RENDERBUFFER_SIZE:				gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),
+			RED_BITS:							gl.getParameter(gl.RED_BITS),
+			GREEN_BITS:							gl.getParameter(gl.GREEN_BITS),
+			BLUE_BITS:							gl.getParameter(gl.BLUE_BITS),
+			ALPHA_BITS:							gl.getParameter(gl.ALPHA_BITS),
+			DEPTH_BITS:							gl.getParameter(gl.DEPTH_BITS),
+			STENCIL_BITS:						gl.getParameter(gl.STENCIL_BITS),
+			// IMPLEMENTATION_COLOR_READ_TYPE:		gl.getParameter(gl.IMPLEMENTATION_COLOR_READ_TYPE),
+			// IMPLEMENTATION_COLOR_READ_FORMAT:	gl.getParameter(gl.IMPLEMENTATION_COLOR_READ_FORMAT),
+			
+			// These return typed arrays, so stringify
+			MAX_VIEWPORT_DIMS:			convertArrayToString(gl.getParameter(gl.MAX_VIEWPORT_DIMS)),
+			ALIASED_POINT_SIZE_RANGE:	convertArrayToString(gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE)),
+			ALIASED_LINE_WIDTH_RANGE:	convertArrayToString(gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE)),
+			COMPRESSED_TEXTURE_FORMATS:	convertArrayToString(gl.getParameter(gl.COMPRESSED_TEXTURE_FORMATS)),
+
+			// Get shader precision formats
+			VERTEX_SHADER_PRECISION_FORMAT_LOW_FLOAT:		JSON.stringify(gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.LOW_FLOAT)),
+			VERTEX_SHADER_PRECISION_FORMAT_MEDIUM_FLOAT:	JSON.stringify(gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.MEDIUM_FLOAT)),
+			VERTEX_SHADER_PRECISION_FORMAT_HIGH_FLOAT:		JSON.stringify(gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.HIGH_FLOAT)),
+			VERTEX_SHADER_PRECISION_FORMAT_LOW_INT:			JSON.stringify(gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.LOW_INT)),
+			VERTEX_SHADER_PRECISION_FORMAT_MEDIUM_INT:		JSON.stringify(gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.MEDIUM_INT)),
+			VERTEX_SHADER_PRECISION_FORMAT_HIGH_INT:		JSON.stringify(gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.HIGH_INT)),
+			FRAGMENT_SHADER_PRECISION_FORMAT_LOW_FLOAT:		JSON.stringify(gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.LOW_FLOAT)),
+			FRAGMENT_SHADER_PRECISION_FORMAT_MEDIUM_FLOAT:	JSON.stringify(gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.MEDIUM_FLOAT)),
+			FRAGMENT_SHADER_PRECISION_FORMAT_HIGH_FLOAT:	JSON.stringify(gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT)),
+			FRAGMENT_SHADER_PRECISION_FORMAT_LOW_INT:		JSON.stringify(gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.LOW_INT)),
+			FRAGMENT_SHADER_PRECISION_FORMAT_MEDIUM_INT:	JSON.stringify(gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.MEDIUM_INT)),
+			FRAGMENT_SHADER_PRECISION_FORMAT_HIGH_INT:		JSON.stringify(gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_INT)),
+		},
+		glSupportedExtensions: gl.getSupportedExtensions()
+	};
+}
 
 // Shim the canvas
 var getContext = HTMLCanvasElement.prototype.getContext;
@@ -24,14 +142,18 @@ HTMLCanvasElement.prototype.getContext = function(name) {
 		
 		console.log(strBoilerplate);
 		
-		console.log('Implementation Limits\n', choke);
+		// console.log('Implementation Limits\n', choke);
 
 		var gl = getContext.apply(this, arguments);
+		
+		// Get the device capabilities
+		gl.deviceImplementationValues = getImplementationValues(gl);
 
 		gl = makeControlledWebGLContext(gl);
 
-		logContextAttributes(gl);
-		logSupportedExtensions(gl);
+
+		// logContextAttributes(gl);
+		// logSupportedExtensions(gl);
 
 		return gl;
 	}
@@ -39,7 +161,7 @@ HTMLCanvasElement.prototype.getContext = function(name) {
 }
 
 function logSupportedExtensions(gl) {
-	console.log(gl.getSupportedExtensions(gl));
+	console.log(gl.getSupportedExtensions());
 }
 
 function logContextAttributes(gl) {
@@ -89,7 +211,7 @@ function makeControlledWebGLContext(gl) {
 			var result = gl['_'+functionName].apply(gl, arguments);
 			var err = gl.getError();
 			if(err != 0) {
-				//console.error('WebGL:', err, functionName);
+				console.warn('WebGL:', getGlEnumName(err) + ':', functionName + ':');
 			}
 			return result;
 		}
@@ -119,7 +241,7 @@ function makeControlledWebGLContext(gl) {
 		return function() {
 			var parameterEnum = arguments[0];
 
-			var enumName = getGlEnumName(parameterEnum);
+			var enumName = getGlEnumName(parameterEnum).toUpperCase();
 
 			// Is it a choke parameter?
 			if(choke[enumName]) {
@@ -154,8 +276,10 @@ function makeControlledWebGLContext(gl) {
 
 			// Be angry when active attribs exceed choke
 			if(activeAttributes > choke['MAX_VERTEX_ATTRIBS']) {
-				throw new Error('\n###  ENFORCE VIRTUAL LIMIT  ###\n\
-ERROR: Implementation limit of ' + choke[wrapper.MAX_VERTEX_ATTRIBS] + ' MAX_VERTEX_ATTRIBS (e.g., number of generic plus conventional active vec4 attributes) exceeded, shader uses up to vec4 attribute ' + (activeAttributes-1) + '.\n');
+				throw createError([
+					'[IN USE: ' + activeAttributes + ', VIRTUAL LIMIT: ' + choke['MAX_VERTEX_ATTRIBS'] + ']',
+					' ERROR: Implementation limit of ' + choke[wrapper.MAX_VERTEX_ATTRIBS] + ' MAX_VERTEX_ATTRIBS (e.g., number of generic plus conventional active vec4 attributes) exceeded, shader uses up to vec4 attribute ' + (activeAttributes-1) + '.',
+				].join('\n'));
 			}
 
 			return rtn;
@@ -169,7 +293,7 @@ ERROR: Implementation limit of ' + choke[wrapper.MAX_VERTEX_ATTRIBS] + ' MAX_VER
 	var getExtension = wrapper.getExtension;
 	wrapper.getExtension = (function() {
 		return function() {
-			var extensionName = arguments[0];
+			var extensionName = arguments[0].toUpperCase();
 
 			// Is the extension blocked?
 			if(typeof choke[extensionName] !== 'undefined' && !choke[extensionName]) {
@@ -184,12 +308,68 @@ ERROR: Implementation limit of ' + choke[wrapper.MAX_VERTEX_ATTRIBS] + ' MAX_VER
 		}
 	})();
 
+
+	// /**
+	//  *  Override getSupportedExtensions()
+	//  */
+	// var getSupportedExtensions = wrapper.getSupportedExtensions;
+	// wrapper.getSupportedExtensions = (function() {
+	// 	return function() {
+	// 		var extensionName = arguments[0].toUpperCase();
+
+	// 		// Is the extension blocked?
+	// 		if(typeof choke[extensionName] !== 'undefined' && !choke[extensionName]) {
+	// 			console.warn('Blocked request to activate extension', extensionName);
+	// 			return null;
+	// 		}
+			
+	// 		// Not blocked?
+	// 		// Pass to original function
+	// 		console.log('Allowed request to activate extension', extensionName);
+	// 		return getSupportedExtensions.apply(wrapper, arguments);
+	// 	}
+	// })();
+
+
+
+	/**
+	 *  Implementation limits
+	 */
+	wrapper.getImplementationValues = function() {
+		return getImplementationValues(wrapper);
+	};
+
+	/**
+	 *  Implementation limits
+	 */
+	// wrapper.getImplementationLimits = function() {
+	// 	return {
+	// 		MAX_VERTEX_ATTRIBS: wrapper.getParameter(wrapper.MAX_VERTEX_ATTRIBS),
+	// 	}
+	// };
+
 	return wrapper;
 }
 
+function createError(str) {
+	var e = new Error(str);
+	log.push(e);
+	return e;
+}
+
+
 var glEnumNames = {
-	34921: 'MAX_VERTEX_ATTRIBS'
+	34921: 'MAX_VERTEX_ATTRIBS',
+	0: 'NO_ERROR',
+    0x0500: 'INVALID_ENUM',
+    0x0501: 'INVALID_VALUE',
+    0x0502: 'INVALID_OPERATION',
+    0x0505: 'OUT_OF_MEMORY',
+    0x0506: 'INVALID_FRAMEBUFFER_OPERATION',
 };
-function getGlEnumName(number) {
-	return glEnumNames[number];
+
+function getGlEnumName(value) {
+	if(value === undefined || typeof value !== 'number') return 'UNDEFINED';
+	var name = glEnumNames[value];
+	return (name !== undefined) ? (name) : ("/*UNKNOWN WebGL ENUM*/ 0x" + value.toString(16) + "");
 }

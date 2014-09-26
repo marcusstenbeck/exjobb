@@ -17,19 +17,20 @@ function update(time) {
 
 	// Camera
 	var dist = 2.0;
-	mat4.lookAt(
-		scene.camera.uV,
-		vec3.fromValues(dist*Math.sin(time/4000), 0, dist*Math.cos(time/4000)),
-		vec3.fromValues(0, 0, 0),
-		UP_VECTOR);
+	// mat4.lookAt(
+	// 	scene.camera.uV,
+	// 	vec3.fromValues(dist*Math.sin(time/4000), 0, dist*Math.cos(time/4000)),
+	// 	vec3.fromValues(0, 0, 0),
+	// 	UP_VECTOR);
+	
 
 
 	// Light position
-	scene.light.uLightPosition = vec3.fromValues(Math.cos(time/1500), 1, Math.sin(time/1500));
+	scene.light.uLightPosition = vec3.fromValues(2*Math.cos(time/1500), 0.8, 2*Math.sin(time/1500));
 	gl.uniform3fv(shader.uniform.uLightPosition, scene.light.uLightPosition);
 
 	// Light direction
-	var lightLookatPoint = vec3.fromValues(0, -0.5, 0);
+	var lightLookatPoint = vec3.fromValues(0, 0.8, 0);
 	// From light pos to lookatpoint
 	mat4.lookAt(
 		scene.light.uLightMatrix,
@@ -97,22 +98,16 @@ function setupScene(gl) {
 	gl.model = {};
 	gl.model.vertices = [
 		// Square
-			-0.5,   0.5,   0.0,   0.5,   0.0,   0.5,   0.0,   0.5,
-			 0.5,   0.5,   0.0,   0.5,   0.0,   0.5,   0.0,   0.5,
-			 0.5,  -0.5,   0.0,   0.5,   0.0,   0.5,   0.0,   0.5,
-			-0.5,  -0.5,   0.0,   0.5,   0.0,   0.5,   0.0,   0.5,
-
-		// Square
-			-100,   100,   -950,   0.5,   0.0,   0.5,   0.0,   0.5,
-			 100,   100,   -950,   0.5,   0.0,   0.5,   0.0,   0.5,
-			 100,  -100,   -950,   0.5,   0.0,   0.5,   0.0,   0.5,
-			-100,  -100,   -950,   0.5,   0.0,   0.5,   0.0,   0.5,
+			-0.5,   0.5,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,
+			 0.5,   0.5,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,
+			 0.5,  -0.5,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,
+			-0.5,  -0.5,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,
 
 		// Floor
-			-10, -1, -10,   0.5,   0.0,   0.5,   0.0,   0.5,
-			 10, -1, -10,   0.5,   0.0,   0.5,   0.0,   0.5,
-			 10, -1,  10,   0.5,   0.0,   0.5,   0.0,   0.5,
-			-10, -1,  10,   0.5,   0.0,   0.5,   0.0,   0.5,
+			-100, -1, -100,   0.0,   0.0,   0.0,   0.0,   0.0,
+			 100, -1, -100,   0.0,   0.0,   0.0,   0.0,   0.0,
+			 100, -1,  100,   0.0,   0.0,   0.0,   0.0,   0.0,
+			-100, -1,  100,   0.0,   0.0,   0.0,   0.0,   0.0,
 		];
 	gl.vBuffer = gl.createBuffer();
 	gl.bindBuffer(gl.ARRAY_BUFFER, gl.vBuffer);
@@ -127,13 +122,9 @@ function setupScene(gl) {
 			0, 1, 2,
 			2, 3, 0,
 
-		// Square 2
+		// Floor
 			4, 5, 6,
 			6, 7, 4,
-
-		// Floor
-			8, 9, 10,
-			10, 11, 8
 	];
 	gl.iBuffer = gl.createBuffer();
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.iBuffer);
@@ -158,7 +149,9 @@ function setupScene(gl) {
 	var uM = mat4.create();
 
 	// View transform
-	scene.camera.uV = mat4.create()
+	scene.camera.uV = mat4.create();
+	mat4.rotateX(scene.camera.uV, scene.camera.uV, Math.PI/2);
+	mat4.translate(scene.camera.uV, scene.camera.uV, vec3.fromValues(-3, -2.1, -8));
 
 	// Perspective transform
 	scene.camera.uP = mat4.create();
@@ -292,8 +285,10 @@ function shadowMapSetupBit(gl) {
 		'vec3 calculateLight() {',
 		'	vec4 lightToPos = vPos - vLightPosition;',
 		'	float dotProduct = dot(normalize(lightToPos.xyz), normalize(vLightDirection));',
+		// '	float luminance = max(0.0, smoothstep(5.0, 1.0, length(lightToPos)));',
+
 		'	float falloff = sign(dotProduct) * smoothstep(0.9, 1.0, abs(dotProduct));',
-		'	float luminance = max(0.0, falloff * smoothstep(5.0, 1.0, length(lightToPos)));',
+		'	float luminance = max(0.0, falloff /* smoothstep(5.0, 1.0, length(lightToPos))*/);',
 
 		'	return vec3(luminance);',
 		'}',
@@ -345,6 +340,7 @@ function shadowMapSetupBit(gl) {
 			'	float shadowValue = texture2D(uDepthTexture, depth.xy).r;',
 
 			'	depth.z *= 0.999;',
+
 			'	if(shadowValue > depth.z) {',
 					// Not in shadow
 			'		return 0.0;',

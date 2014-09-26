@@ -25,32 +25,46 @@ function destroyIframe(iframe) {
 
 
 var sequence = [
-	'shadow-mapping.html?t=4000',
-	'shadow-mapping.html?t=4000',
-	'shadow-mapping.html?t=4000',
-	'shadow-mapping.html?t=4000&webgl_depth_texture=0',
-	'shadow-mapping.html?t=4000&webgl_depth_texture=1',
-	'shadow-mapping.html?t=4000',
-	'shadow-mapping.html?t=4000',
-	'shadow-mapping.html?t=4000',
-	'shadow-mapping.html?t=4000&webgl_depth_texture=0',
-	'shadow-mapping.html?t=4000&webgl_depth_texture=1',
-	'shadow-mapping.html',
+	'shadow-mapping.html?t=6600',
+	'shadow-mapping.html?t=6600&choke=webgl_depth_texture',
+
+	'float-texture-color.html?t=6600',
+	'float-texture-color.html?t=6600&choke=oes_texture_float',
+	'float-texture-color.html?t=6600&choke=oes_texture_half_float',
+	'float-texture-color.html?t=6600&choke=oes_texture_float,oes_texture_half_float',
+
+	'float-texture.html?t=6600',
+	'float-texture.html?t=6600&choke=oes_texture_float',
+	'float-texture.html?t=6600&choke=oes_texture_half_float',
+	'float-texture.html?t=6600&choke=oes_texture_float,oes_texture_half_float',
+
+	'hdr-colors.html?t=500',
+	'hdr-colors.html?t=500&choke=oes_texture_float',
+	'hdr-colors.html?t=500&choke=oes_texture_half_float',
+	'hdr-colors.html?t=500&choke=oes_texture_float,oes_texture_half_float',
 ];
 
 var myIframe = createIframe();
+var testResults = [];
 
 var dumpImage = function() {
-	var im = new Image();
-	im.src = myIframe.contentWindow.document.body.getElementsByTagName('canvas')[0].toDataURL('image/png');
-	im.width = 128;
-	im.height = 128;
-	im.className = 'pancake-ocean image-' + (i - 1);
-	document.body.appendChild(im);
-	
+	var canv = myIframe.contentWindow.document.body.getElementsByTagName('canvas')[0];
+	var imData = canv.toDataURL('image/png');
+
+	var gl = myIframe.contentWindow.gl;
+	testResults.push({
+		log: myIframe.contentWindow.log,
+		implementationValues: gl.getImplementationValues(),
+		imageData: imData,
+	});
+
 	if(i < sequence.length) {
 		reloadIframe(myIframe, sequence[i]);
 	//	setTimeout(dumpImage, 10);
+	}
+
+	if(i == sequence.length) {
+		done();
 	}
 
 	i++;
@@ -61,3 +75,24 @@ reloadIframe(myIframe, sequence[0]);
 myIframe.addEventListener('load', function() {
 	setTimeout(dumpImage, 10);
 });
+
+function done() {
+	console.log('Test run done, removing iframe');
+	destroyIframe(myIframe);
+	
+	console.log('Test run data', testResults);
+
+	var p = document.createElement('p');
+	p.innerHTML = 'Test run was successful!'
+	document.body.appendChild(p);
+
+	var im;
+	for(var i = 0; i < testResults.length; i++) {
+		im = new Image();
+		im.src = testResults[i].imageData;
+		im.width = 128;
+		im.height = 128;
+		im.className = 'pancake-ocean image-' + (i - 1);
+		document.body.appendChild(im);
+	}
+}
