@@ -90,29 +90,22 @@ function init(canvasWidth, canvasHeight) {
 	var canv = document.getElementsByTagName('canvas')[0];
 
 	var requestedContextAttributes = {
-		antialias: false,
-		preserveDrawingBuffer: true
+		antialias: false
 	};
 
-	try {
-		var gl = canv.getContext('webgl', requestedContextAttributes);
-	} catch (e) {
-		console.error('WebGL is not supported', e);
+	var gl = null;
+	var names = ['webgl', 'experimental-webgl'];
+
+	for(var i = 0; i < names.length; i++) {	
+		try {
+			gl = canv.getContext(names[i], requestedContextAttributes);
+		} catch (e) {}
+
+		if(gl) {
+			console.log('Context:', names[i]);
+			break;
+		}
 	}
 
-	if(gl) {
-		return gl;
-	}
-
-	return null;
-}
-
-
-function loop(time) {
-	window.requestAnimationFrame(loop);
-
-	if(typeof overrideTime === 'number') time = overrideTime;
-
-	update(time);
-	draw();
+	return gl;
 }

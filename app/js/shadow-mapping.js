@@ -470,9 +470,6 @@ function shadowMapSetupBit(gl) {
 
 window.gl = init(canvasWidth, canvasHeight);
 window.scene = {};
-	
+
 setupScene(gl);
 shadowMapSetupBit(gl);
-
-
-loop();

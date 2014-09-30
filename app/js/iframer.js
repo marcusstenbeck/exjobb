@@ -48,8 +48,10 @@ var myIframe = createIframe();
 var testResults = [];
 
 var dumpImage = function() {
-	var canv = myIframe.contentWindow.document.body.getElementsByTagName('canvas')[0];
-	var imData = canv.toDataURL('image/png');
+
+	myIframe.contentWindow.update(6600);
+	myIframe.contentWindow.draw();
+	var imData = myIframe.contentWindow.document.body.getElementsByTagName('canvas')[0].toDataURL('image/png');
 
 	var gl = myIframe.contentWindow.gl;
 	testResults.push({
@@ -60,7 +62,6 @@ var dumpImage = function() {
 
 	if(i < sequence.length) {
 		reloadIframe(myIframe, sequence[i]);
-	//	setTimeout(dumpImage, 10);
 	}
 
 	if(i == sequence.length) {
@@ -73,26 +74,38 @@ var dumpImage = function() {
 var i = 1;
 reloadIframe(myIframe, sequence[0]);
 myIframe.addEventListener('load', function() {
-	setTimeout(dumpImage, 10);
+	dumpImage();
 });
 
 function done() {
-	console.log('Test run done, removing iframe');
+	// Test run done, remove iframe
 	destroyIframe(myIframe);
 	
-	console.log('Test run data', testResults);
-
 	var p = document.createElement('p');
 	p.innerHTML = 'Test run was successful!'
+	p.setAttribute('class', 'message-test-done')
 	document.body.appendChild(p);
+
+	var btnSave = document.createElement('button');
+	btnSave.innerHTML = 'Save Results to Database';
+	btnSave.setAttribute('class', 'btn-save');
+	btnSave.addEventListener('click', function() {
+		console.log('BOOOH-YUUHHHUUAAAHHHH!!!');
+		console.log('Test run data', testResults);
+	});
+	document.body.appendChild(btnSave);
+
 
 	var im;
 	for(var i = 0; i < testResults.length; i++) {
-		im = new Image();
-		im.src = testResults[i].imageData;
-		im.width = 128;
-		im.height = 128;
-		im.className = 'pancake-ocean image-' + (i - 1);
-		document.body.appendChild(im);
+		createImage(testResults[i].imageData);
 	}
+}
+
+function createImage(src) {
+	var im = new Image();
+	im.src = src;
+	im.width = 128;
+	im.height = 128;
+	document.body.appendChild(im);
 }

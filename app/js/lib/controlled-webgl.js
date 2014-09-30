@@ -30,6 +30,8 @@ function wrapLog(fn, str) {
 		// Chrome already prints WebGL warnings automatically
 		if(typeof arguments[0] === 'string' && arguments[0].slice(0, 6) === 'WebGL:') return;
 
+		if(log.length >= 15) throw 'Max 15 log entries allowed.';
+
 		fn.apply(this, arguments);
 	};
 };
@@ -118,42 +120,55 @@ function getImplementationValues(gl) {
 			COMPRESSED_TEXTURE_FORMATS:	convertArrayToString(gl.getParameter(gl.COMPRESSED_TEXTURE_FORMATS)),
 
 			// Get shader precision formats
-			VERTEX_SHADER_PRECISION_FORMAT_LOW_FLOAT:		JSON.stringify(gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.LOW_FLOAT)),
-			VERTEX_SHADER_PRECISION_FORMAT_MEDIUM_FLOAT:	JSON.stringify(gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.MEDIUM_FLOAT)),
-			VERTEX_SHADER_PRECISION_FORMAT_HIGH_FLOAT:		JSON.stringify(gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.HIGH_FLOAT)),
-			VERTEX_SHADER_PRECISION_FORMAT_LOW_INT:			JSON.stringify(gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.LOW_INT)),
-			VERTEX_SHADER_PRECISION_FORMAT_MEDIUM_INT:		JSON.stringify(gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.MEDIUM_INT)),
-			VERTEX_SHADER_PRECISION_FORMAT_HIGH_INT:		JSON.stringify(gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.HIGH_INT)),
-			FRAGMENT_SHADER_PRECISION_FORMAT_LOW_FLOAT:		JSON.stringify(gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.LOW_FLOAT)),
-			FRAGMENT_SHADER_PRECISION_FORMAT_MEDIUM_FLOAT:	JSON.stringify(gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.MEDIUM_FLOAT)),
-			FRAGMENT_SHADER_PRECISION_FORMAT_HIGH_FLOAT:	JSON.stringify(gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT)),
-			FRAGMENT_SHADER_PRECISION_FORMAT_LOW_INT:		JSON.stringify(gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.LOW_INT)),
-			FRAGMENT_SHADER_PRECISION_FORMAT_MEDIUM_INT:	JSON.stringify(gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.MEDIUM_INT)),
-			FRAGMENT_SHADER_PRECISION_FORMAT_HIGH_INT:		JSON.stringify(gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_INT)),
+			VERTEX_SHADER_PRECISION_FORMAT_LOW_FLOAT:		shaderPrecisionFormat(gl.VERTEX_SHADER, gl.LOW_FLOAT),
+			VERTEX_SHADER_PRECISION_FORMAT_MEDIUM_FLOAT:	shaderPrecisionFormat(gl.VERTEX_SHADER, gl.MEDIUM_FLOAT),
+			VERTEX_SHADER_PRECISION_FORMAT_HIGH_FLOAT:		shaderPrecisionFormat(gl.VERTEX_SHADER, gl.HIGH_FLOAT),
+			VERTEX_SHADER_PRECISION_FORMAT_LOW_INT:			shaderPrecisionFormat(gl.VERTEX_SHADER, gl.LOW_INT),
+			VERTEX_SHADER_PRECISION_FORMAT_MEDIUM_INT:		shaderPrecisionFormat(gl.VERTEX_SHADER, gl.MEDIUM_INT),
+			VERTEX_SHADER_PRECISION_FORMAT_HIGH_INT:		shaderPrecisionFormat(gl.VERTEX_SHADER, gl.HIGH_INT),
+			FRAGMENT_SHADER_PRECISION_FORMAT_LOW_FLOAT:		shaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.LOW_FLOAT),
+			FRAGMENT_SHADER_PRECISION_FORMAT_MEDIUM_FLOAT:	shaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.MEDIUM_FLOAT),
+			FRAGMENT_SHADER_PRECISION_FORMAT_HIGH_FLOAT:	shaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT),
+			FRAGMENT_SHADER_PRECISION_FORMAT_LOW_INT:		shaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.LOW_INT),
+			FRAGMENT_SHADER_PRECISION_FORMAT_MEDIUM_INT:	shaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.MEDIUM_INT),
+			FRAGMENT_SHADER_PRECISION_FORMAT_HIGH_INT:		shaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_INT),
 		},
-		glSupportedExtensions: gl.getSupportedExtensions()
+		glSupportedExtensions: gl.getSupportedExtensions(),
+		glContextName: gl.contextName
 	};
+}
+
+
+function shaderPrecisionFormat(shader_enum, format_enum) {
+	var fmt = undefined;
+
+	try {
+		JSON.stringify(gl.getShaderPrecisionFormat(shader_enum, format_enum))
+	} catch(e) {}
+
+	if(!fmt) fmt = undefined;
+
+	return fmt;
 }
 
 // Shim the canvas
 var getContext = HTMLCanvasElement.prototype.getContext;
 HTMLCanvasElement.prototype.getContext = function(name) {
-	if(name == 'webgl') {
+	if(name.indexOf('webgl') !== -1) {
 		
-		console.log(strBoilerplate);
-		
-		// console.log('Implementation Limits\n', choke);
-
 		var gl = getContext.apply(this, arguments);
-		
+
 		// Get the device capabilities
 		gl.deviceImplementationValues = getImplementationValues(gl);
 
 		gl = makeControlledWebGLContext(gl);
 
+		gl.contextName = arguments[0];
 
-		// logContextAttributes(gl);
-		// logSupportedExtensions(gl);
+		if(gl) {
+			console.log(strBoilerplate);
+			//console.log('Implementation Limits\n', choke);
+		}
 
 		return gl;
 	}
