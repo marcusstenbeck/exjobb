@@ -1,4 +1,5 @@
 // web.js
+var fs = require('fs');
 var express = require('express');
 var logfmt = require('logfmt');
 var bodyParser = require('body-parser');
@@ -78,6 +79,37 @@ app.get(apiPrefix + '/list', function(req, res) {
 	});
 });
 
+
+app.get(apiPrefix + '/dump', function(req, res) {
+	// 
+	mongo.MongoClient.connect(mongoUri, function (err, db) {
+		db.collection('webgl_info', function(err, collection) {
+			collection.find().toArray(function(err, items) {
+				
+				var item, imageData, image;
+				
+				for (var i = items.length - 1; i >= 0; i--) {
+					item = items[i];
+					
+					// Pull out the image, we don't want to send it in the JSON
+					imageData = item.imageData;
+					item.imageData = undefined;
+
+					// Remove the front matter that comes from toDataURL()
+					imageData = imageData.replace(/^data:image\/(png|jpg);base64,/, '')
+
+					// Create an image
+					image = new Buffer(imageData, 'base64');
+
+					fs.writeFileSync('dump/' + item._id + '.json', JSON.stringify(item));
+					fs.writeFileSync('dump/' + item._id + '-image.png', image);
+				};
+
+				res.send({message: 'success, files dumped'});
+			});
+		});
+	});
+});
 
 
 // Start listening

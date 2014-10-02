@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<style type="text/css">
+	</style>
+</head>
+<body>
+<script type="text/javascript" src="js/vendor/jquery.js"></script>
+<script type="text/javascript">
+
+	$(document).ready(function() {
+
+		$.get('/api/1/dump')
+			.done(function(response) {
+				$('body').append($('<p>Done, and very good, sir!</p>'));
+			});
+
+	});
+
+</script>
+</body>
+</html>
