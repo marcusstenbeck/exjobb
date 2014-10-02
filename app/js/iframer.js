@@ -1,6 +1,5 @@
 'use strict';
 
-
 function createIframe(src) {
 	var iframe = document.createElement('iframe');
 	iframe.width = 512;
@@ -58,6 +57,7 @@ var dumpImage = function() {
 		log: myIframe.contentWindow.log,
 		implementationValues: gl.getImplementationValues(),
 		imageData: imData,
+		url: myIframe.src,
 	});
 
 	if(i < sequence.length) {
@@ -81,25 +81,56 @@ function done() {
 	// Test run done, remove iframe
 	destroyIframe(myIframe);
 	
-	var p = document.createElement('p');
-	p.innerHTML = 'Test run was successful!'
-	p.setAttribute('class', 'message-test-done')
-	document.body.appendChild(p);
 
-	var btnSave = document.createElement('button');
-	btnSave.innerHTML = 'Save Results to Database';
-	btnSave.setAttribute('class', 'btn-save');
-	btnSave.addEventListener('click', function() {
-		console.log('BOOOH-YUUHHHUUAAAHHHH!!!');
-		console.log('Test run data', testResults);
+	console.log(testResults);
+
+	$('#test-run-and-done').show();
+
+	$('#save-to-db').click(function() {
+
+		console.log('Saving ' + testResults.length + ' results to database ...');
+
+		$('html').addClass('is-uploading');
+		saveResults(testResults);
 	});
-	document.body.appendChild(btnSave);
+
 
 
 	var im;
 	for(var i = 0; i < testResults.length; i++) {
 		createImage(testResults[i].imageData);
 	}
+}
+
+function saveResults(results) {
+	if(results.length === 0) {
+		console.log('Nothing left. Upload done.');
+		$('html').removeClass('is-uploading');
+		return;
+	} else {
+		console.log(results.length + ' left');
+	}
+
+	// Pop and save one of the results
+	var result = results.pop();
+
+	// Add comment
+	result.comment = $('#input-comments').val();
+
+
+	$.ajax({
+			type: "POST",
+			url: '/api/1/collect',
+			data: JSON.stringify(result),
+			contentType: 'application/json'
+		})
+	.done(function(response) {
+			saveResults(results);
+		})
+	.fail(function(response, textStatus) {
+			console.log('Failed. Canceling upload.');
+			console.log(response, textStatus);
+		});
 }
 
 function createImage(src) {

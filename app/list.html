@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<style type="text/css">
+	</style>
+</head>
+<body>
+<script type="text/javascript" src="js/vendor/jquery.js"></script>
+<script type="text/javascript">
+	$(document).ready(function() {
+
+		$.get('/api/1/list')
+			.done(function(response) {
+				addResultsToDOM(response.items);
+			});
+
+	});
+
+	function addResultsToDOM(results) {
+		var $resultElement = $('<div>');
+		
+		console.log(results);
+		console.log(results.length);
+
+		for(var i = 0; i < results.length; i++) {
+			
+			$resultElement.append($('<p>').html(results[i].implementationValues.userAgent));
+			$resultElement.append($('<p>').html(results[i].url));
+
+			var $imEl = $('<img>', {
+				src: results[i].imageData,
+				width: 128,
+				height: 128
+			});
+			$resultElement.append($imEl);
+		}
+
+		$('body').append($resultElement);
+
+	}
+</script>
+</body>
+</html>

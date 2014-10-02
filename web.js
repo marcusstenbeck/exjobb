@@ -7,9 +7,16 @@ var app = express();
 
 app.use(logfmt.requestLogger());
 
+// Add parsing for JSON in POST requests
+app.use(bodyParser.json({
+	limit: '50mb'
+}));
 
-app.use(bodyParser.json()); // Add parsing for JSON in POST requests
-app.use(bodyParser.urlencoded()); // Add parsing for URL encoded in POST requests
+// Add parsing for URL encoded in POST requests
+app.use(bodyParser.urlencoded({
+	limit: '50mb',
+	extended: true
+}));
 
 
 // Static file serving
@@ -46,6 +53,7 @@ app.post(apiPrefix + '/collect', function(req, res) {
 	// Try storing in the database
 	mongo.MongoClient.connect(mongoUri, function (err, db) {
 		db.collection('webgl_info', function(err, collection) {
+			console.log(req.body);
 			collection.insert(req.body, {w:1}, function(err, result) {
 				if(err) {
 					res.send({ error: 'An error has occured' });
@@ -59,7 +67,7 @@ app.post(apiPrefix + '/collect', function(req, res) {
 });
 
 
-app.get(apiPrefix + '/dump', function(req, res) {
+app.get(apiPrefix + '/list', function(req, res) {
 	// 
 	mongo.MongoClient.connect(mongoUri, function (err, db) {
 		db.collection('webgl_info', function(err, collection) {

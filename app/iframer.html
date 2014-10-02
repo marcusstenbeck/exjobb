@@ -31,13 +31,42 @@
 		font-weight: bold;
 	}
 
-	.message-test-done {
-		font-size: 24px;
+	#test-run-and-done {
+		display: none;
+	}
+
+	.in-progress {
+		display: none;
+	}
+	.is-uploading .in-progress {
+		display: block;
+		width: 120px;
+		height: 60px;
+
+		position: absolute;
+		left: 0;
+		top: 0;
+
+		background-color: yellow;
+		border: solid 3px red;
+		
+		text-align: center;
 	}
 
 	</style>
 </head>
 <body>
+<div id="test-run-and-done">
+	<h2>Test Done</h2>
+	<label for="input-description">Add comment</label>
+	<textarea id="input-comments" name="input-description"></textarea>
+	<button id="save-to-db" class="btn-save">Save Results to Database</button>
+</div>
+
+<div class="in-progress">
+	<p>Working ...</p>
+</div>
+
 <script type="text/javascript" src="js/vendor/jquery.js"></script>
 <script type="text/javascript" src="js/iframer.js"></script>
 </body>
